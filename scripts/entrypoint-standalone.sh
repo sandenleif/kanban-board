@@ -75,8 +75,8 @@ export DATABASE_URL="postgresql://$PG_USER:$PG_PASS@127.0.0.1:5432/$PG_DB"
 
 # ─── Migrations ───────────────────────────────────────────────────────────────
 PRISMA="node node_modules/prisma/build/index.js"
-echo "📦 Running database migrations..."
-$PRISMA migrate deploy
+echo "📦 Pushing schema to database..."
+$PRISMA db push --skip-generate --accept-data-loss
 
 touch "$DATA_DIR/.initialized"
 
