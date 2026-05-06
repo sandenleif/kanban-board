@@ -49,6 +49,16 @@ enum ActivityType {
   CHECKLIST_UPDATED
 }
 
+// Singleton row for global app configuration (logo etc.)
+model AppSettings {
+  id           String   @id @default("singleton")
+  logoBase64   String?  @db.Text
+  logoMimeType String?
+  updatedAt    DateTime @updatedAt
+
+  @@map("app_settings")
+}
+
 model User {
   id         String     @id @default(cuid())
   email      String     @unique

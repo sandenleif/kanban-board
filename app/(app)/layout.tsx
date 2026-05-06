@@ -12,36 +12,44 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     select: { status: true, isAdmin: true },
   });
 
-  // Session references a deleted user (e.g. after DB reset)
   if (!user) {
     await clearSession();
     redirect("/login");
   }
 
-  // Pending users can only see /pending
   if (user.status === "PENDING") redirect("/pending");
 
-  // Suspended users are kicked out
   if (user.status === "SUSPENDED") {
     await clearSession();
     redirect("/login");
   }
 
-  const workspaces = await prisma.workspaceMember.findMany({
-    where: { userId: session.userId },
-    include: {
-      workspace: {
-        include: {
-          projects: {
-            where: { status: "ACTIVE" },
-            orderBy: { createdAt: "desc" },
-            take: 10,
+  const [workspaces, appSettings] = await Promise.all([
+    prisma.workspaceMember.findMany({
+      where: { userId: session.userId },
+      include: {
+        workspace: {
+          include: {
+            projects: {
+              where: { status: "ACTIVE" },
+              orderBy: { createdAt: "desc" },
+              take: 10,
+            },
           },
         },
       },
-    },
-    orderBy: { joinedAt: "asc" },
-  });
+      orderBy: { joinedAt: "asc" },
+    }),
+    prisma.appSettings.findUnique({
+      where: { id: "singleton" },
+      select: { logoBase64: true, logoMimeType: true },
+    }),
+  ]);
+
+  const logoSrc =
+    appSettings?.logoBase64 && appSettings?.logoMimeType
+      ? `data:${appSettings.logoMimeType};base64,${appSettings.logoBase64}`
+      : null;
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -49,6 +57,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         workspaces={workspaces.map((m) => ({ ...m.workspace, role: m.role }))}
         session={session}
         isAdmin={user.isAdmin}
+        logoSrc={logoSrc}
       />
       <div className="flex flex-1 flex-col overflow-hidden">
         <Topbar session={session} />

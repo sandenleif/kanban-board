@@ -7,10 +7,12 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "db:start": "docker run -d --name kanban-postgres -e POSTGRES_USER=kanban -e POSTGRES_PASSWORD=kanban -e POSTGRES_DB=kanban_board -p 5432:5432 postgres:16-alpine 2>/dev/null || docker start kanban-postgres",
+    "db:stop": "docker stop kanban-postgres",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
-    "db:seed": "prisma db seed",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "setup": "npm run db:start && sleep 2 && npx prisma migrate dev --name init && echo '✅ Ready. Copy .env.example to .env and run: npm run dev'"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

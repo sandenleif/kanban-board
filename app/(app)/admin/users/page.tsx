@@ -2,7 +2,7 @@ import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import { UserManagementTable } from "@/components/admin/UserManagementTable";
-import { Badge } from "@/components/ui/badge";
+import { LogoUpload } from "@/components/admin/LogoUpload";
 import { Users, Clock, CheckCircle2, Ban } from "lucide-react";
 
 export default async function AdminUsersPage() {
@@ -15,7 +15,8 @@ export default async function AdminUsersPage() {
 
   if (!currentUser?.isAdmin) notFound();
 
-  const users = await prisma.user.findMany({
+  const [users, appSettings] = await Promise.all([
+    prisma.user.findMany({
     orderBy: [{ status: "asc" }, { createdAt: "desc" }],
     select: {
       id: true,
@@ -26,7 +27,9 @@ export default async function AdminUsersPage() {
       createdAt: true,
       _count: { select: { workspaceMembers: true } },
     },
-  });
+    }),
+    prisma.appSettings.findUnique({ where: { id: "singleton" } }),
+  ]);
 
   const pending = users.filter((u) => u.status === "PENDING").length;
   const active = users.filter((u) => u.status === "ACTIVE").length;
@@ -59,6 +62,7 @@ export default async function AdminUsersPage() {
         ))}
       </div>
 
+      <LogoUpload currentLogo={appSettings} />
       <UserManagementTable users={users} currentUserId={session.userId} />
     </div>
   );

@@ -36,9 +36,10 @@ interface SidebarProps {
   workspaces: WorkspaceWithProjects[];
   session: SessionPayload;
   isAdmin: boolean;
+  logoSrc: string | null;
 }
 
-export function Sidebar({ workspaces, session: _, isAdmin }: SidebarProps) {
+export function Sidebar({ workspaces, session: _, isAdmin, logoSrc }: SidebarProps) {
   const pathname = usePathname();
   const [expandedWorkspaces, setExpandedWorkspaces] = useState<Set<string>>(
     new Set(workspaces.map((w) => w.id))
@@ -57,14 +58,24 @@ export function Sidebar({ workspaces, session: _, isAdmin }: SidebarProps) {
   return (
     <>
       <aside className="flex h-full w-60 flex-col border-r border-sidebar-border bg-sidebar">
-        <div className="flex items-center gap-2 px-4 py-4 border-b border-sidebar-border">
-          <div className="w-7 h-7 rounded-md bg-primary flex items-center justify-center shrink-0">
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className="text-white">
-              <rect x="1" y="1" width="5" height="14" rx="1" fill="currentColor" />
-              <rect x="8" y="1" width="5" height="9" rx="1" fill="currentColor" opacity="0.7" />
-            </svg>
-          </div>
-          <span className="font-semibold text-sm text-foreground">KanbanFlow</span>
+        <div className="flex items-center gap-2 px-4 py-4 border-b border-sidebar-border min-h-[57px]">
+          {logoSrc ? (
+            <img
+              src={logoSrc}
+              alt="Company logo"
+              className="h-8 max-w-[140px] object-contain"
+            />
+          ) : (
+            <>
+              <div className="w-7 h-7 rounded-md bg-primary flex items-center justify-center shrink-0">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className="text-white">
+                  <rect x="1" y="1" width="5" height="14" rx="1" fill="currentColor" />
+                  <rect x="8" y="1" width="5" height="9" rx="1" fill="currentColor" opacity="0.7" />
+                </svg>
+              </div>
+              <span className="font-semibold text-sm text-foreground">KanbanFlow</span>
+            </>
+          )}
         </div>
 
         <nav className="flex flex-col flex-1 overflow-y-auto py-2">
@@ -106,6 +117,7 @@ export function Sidebar({ workspaces, session: _, isAdmin }: SidebarProps) {
               variant="ghost"
               size="icon"
               className="h-5 w-5 text-muted-foreground hover:text-foreground"
+              type="button"
               onClick={() => setShowCreateWorkspace(true)}
               title="New workspace"
             >

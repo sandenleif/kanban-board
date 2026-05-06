@@ -16,6 +16,7 @@ import { getInitials } from "@/lib/utils";
 import { LogOut, Settings, User } from "lucide-react";
 import Link from "next/link";
 import type { SessionPayload } from "@/lib/auth";
+import { ThemeToggle } from "./ThemeToggle";
 
 interface TopbarProps {
   session: SessionPayload;
@@ -33,7 +34,9 @@ export function Topbar({ session }: TopbarProps) {
   return (
     <header className="flex h-14 items-center justify-between border-b border-border bg-background px-6">
       <div />
-      <DropdownMenu>
+      <div className="flex items-center gap-1">
+        <ThemeToggle />
+        <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" className="relative h-8 w-8 rounded-full p-0">
             <Avatar className="h-8 w-8">
@@ -74,6 +77,7 @@ export function Topbar({ session }: TopbarProps) {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+      </div>
     </header>
   );
 }
