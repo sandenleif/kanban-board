@@ -27,8 +27,8 @@ export function LogoUpload({ currentLogo }: LogoUploadProps) {
       toast.error("Only image files are allowed");
       return;
     }
-    if (file.size > 512 * 1024) {
-      toast.error("Max file size is 512 KB");
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("Max file size is 2 MB");
       return;
     }
 
@@ -69,7 +69,7 @@ export function LogoUpload({ currentLogo }: LogoUploadProps) {
       <CardHeader>
         <CardTitle>Company Logo</CardTitle>
         <CardDescription>
-          Shown in the top-left sidebar. PNG, JPG, SVG — max 512 KB.
+          Shown in the top-left sidebar. PNG, JPG, SVG — max 2 MB.
         </CardDescription>
       </CardHeader>
       <CardContent>

@@ -21,7 +21,7 @@ export async function uploadLogoAction(formData: FormData): Promise<ActionResult
   const file = formData.get("logo") as File | null;
   if (!file || file.size === 0) return { error: "No file selected" };
   if (!file.type.startsWith("image/")) return { error: "File must be an image" };
-  if (file.size > 512 * 1024) return { error: "Max file size is 512 KB" };
+  if (file.size > 2 * 1024 * 1024) return { error: "Max file size is 2 MB" };
 
   const buffer = Buffer.from(await file.arrayBuffer());
   const base64 = buffer.toString("base64");

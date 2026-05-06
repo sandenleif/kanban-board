@@ -3,7 +3,7 @@
 import { useTransition } from "react";
 import { logoutAction } from "@/actions/auth";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,9 +20,10 @@ import { ThemeToggle } from "./ThemeToggle";
 
 interface TopbarProps {
   session: SessionPayload;
+  avatarSrc?: string | null;
 }
 
-export function Topbar({ session }: TopbarProps) {
+export function Topbar({ session, avatarSrc }: TopbarProps) {
   const [isPending, startTransition] = useTransition();
 
   const handleLogout = () => {
@@ -40,6 +41,7 @@ export function Topbar({ session }: TopbarProps) {
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" className="relative h-8 w-8 rounded-full p-0">
             <Avatar className="h-8 w-8">
+              {avatarSrc && <AvatarImage src={avatarSrc} alt={session.name} />}
               <AvatarFallback className="bg-primary/20 text-primary text-xs font-semibold">
                 {getInitials(session.name)}
               </AvatarFallback>

@@ -64,8 +64,10 @@ model User {
   email      String     @unique
   name       String
   password   String
-  avatarUrl  String?
-  status     UserStatus @default(PENDING)
+  avatarUrl      String?
+  avatarBase64   String?  @db.Text
+  avatarMimeType String?
+  status         UserStatus @default(PENDING)
   isAdmin    Boolean    @default(false)
   createdAt  DateTime   @default(now())
   updatedAt  DateTime   @updatedAt

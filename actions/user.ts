@@ -29,6 +29,37 @@ export async function updateProfileAction(formData: FormData): Promise<ActionRes
   return { success: true };
 }
 
+export async function uploadAvatarAction(formData: FormData): Promise<ActionResult> {
+  const session = await requireSession();
+  const file = formData.get("avatar") as File | null;
+  if (!file || file.size === 0) return { error: "No file selected" };
+  if (!file.type.startsWith("image/")) return { error: "File must be an image" };
+  if (file.size > 2 * 1024 * 1024) return { error: "Max file size is 2 MB" };
+
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const base64 = buffer.toString("base64");
+
+  await prisma.user.update({
+    where: { id: session.userId },
+    data: { avatarBase64: base64, avatarMimeType: file.type },
+  });
+
+  revalidatePath("/", "layout");
+  return { success: true };
+}
+
+export async function removeAvatarAction(): Promise<ActionResult> {
+  const session = await requireSession();
+
+  await prisma.user.update({
+    where: { id: session.userId },
+    data: { avatarBase64: null, avatarMimeType: null },
+  });
+
+  revalidatePath("/", "layout");
+  return { success: true };
+}
+
 export async function updatePasswordAction(formData: FormData): Promise<ActionResult> {
   const session = await requireSession();
   const currentPassword = formData.get("currentPassword") as string;
