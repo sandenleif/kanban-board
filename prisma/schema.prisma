@@ -1,0 +1,257 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x", "linux-musl-arm64-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+}
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum ProjectStatus {
+  ACTIVE
+  ARCHIVED
+  COMPLETED
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum ActivityType {
+  CREATED
+  UPDATED
+  MOVED
+  ASSIGNED
+  COMMENTED
+  COMPLETED
+  REOPENED
+  LABEL_ADDED
+  LABEL_REMOVED
+  DUE_DATE_SET
+  DUE_DATE_REMOVED
+  CHECKLIST_UPDATED
+}
+
+model User {
+  id         String     @id @default(cuid())
+  email      String     @unique
+  name       String
+  password   String
+  avatarUrl  String?
+  status     UserStatus @default(PENDING)
+  isAdmin    Boolean    @default(false)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  workspaceMembers WorkspaceMember[]
+  ownedWorkspaces  Workspace[]       @relation("WorkspaceOwner")
+  createdProjects  Project[]         @relation("ProjectCreator")
+  assignedTasks    Task[]            @relation("TaskAssignee")
+  createdTasks     Task[]            @relation("TaskCreator")
+  comments         TaskComment[]
+  activities       TaskActivity[]
+  uploads          Attachment[]
+
+  @@map("users")
+}
+
+model Workspace {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  slug        String   @unique
+  ownerId     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  owner    User              @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members  WorkspaceMember[]
+  projects Project[]
+
+  @@map("workspaces")
+}
+
+model WorkspaceMember {
+  id          String        @id @default(cuid())
+  workspaceId String
+  userId      String
+  role        WorkspaceRole @default(MEMBER)
+  joinedAt    DateTime      @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@map("workspace_members")
+}
+
+model Project {
+  id          String        @id @default(cuid())
+  name        String
+  description String?
+  status      ProjectStatus @default(ACTIVE)
+  workspaceId String
+  createdById String
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy User             @relation("ProjectCreator", fields: [createdById], references: [id])
+  sections  ProjectSection[]
+  labels    TaskLabel[]
+
+  @@map("projects")
+}
+
+model ProjectSection {
+  id        String   @id @default(cuid())
+  name      String
+  position  Int
+  projectId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  columns BoardColumn[]
+
+  @@map("project_sections")
+}
+
+model BoardColumn {
+  id        String   @id @default(cuid())
+  name      String
+  position  Int
+  sectionId String
+  color     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  section ProjectSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  tasks   Task[]
+
+  @@map("board_columns")
+}
+
+model Task {
+  id          String       @id @default(cuid())
+  title       String
+  description String?
+  priority    TaskPriority @default(MEDIUM)
+  dueDate     DateTime?
+  position    Int
+  columnId    String
+  projectId   String
+  createdById String
+  assigneeId  String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  column      BoardColumn         @relation(fields: [columnId], references: [id], onDelete: Cascade)
+  createdBy   User                @relation("TaskCreator", fields: [createdById], references: [id])
+  assignee    User?               @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  labels      TaskLabelOnTask[]
+  comments    TaskComment[]
+  checklist   TaskChecklistItem[]
+  activities  TaskActivity[]
+  attachments Attachment[]
+
+  @@map("tasks")
+}
+
+model TaskLabel {
+  id        String @id @default(cuid())
+  name      String
+  color     String
+  projectId String
+
+  project Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks   TaskLabelOnTask[]
+
+  @@map("task_labels")
+}
+
+model TaskLabelOnTask {
+  taskId  String
+  labelId String
+
+  task  Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  label TaskLabel @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, labelId])
+  @@map("task_label_on_task")
+}
+
+model TaskComment {
+  id        String   @id @default(cuid())
+  content   String
+  taskId    String
+  authorId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  author User @relation(fields: [authorId], references: [id])
+
+  @@map("task_comments")
+}
+
+model TaskChecklistItem {
+  id        String   @id @default(cuid())
+  title     String
+  completed Boolean  @default(false)
+  position  Int
+  taskId    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@map("task_checklist_items")
+}
+
+model TaskActivity {
+  id        String       @id @default(cuid())
+  type      ActivityType
+  content   String?
+  taskId    String
+  userId    String
+  createdAt DateTime     @default(now())
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("task_activities")
+}
+
+model Attachment {
+  id           String   @id @default(cuid())
+  name         String
+  url          String
+  size         Int
+  mimeType     String
+  taskId       String
+  uploadedById String
+  createdAt    DateTime @default(now())
+
+  task       Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  uploadedBy User @relation(fields: [uploadedById], references: [id])
+
+  @@map("attachments")
+}
