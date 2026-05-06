@@ -28,7 +28,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata (tags, labels)
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # ── Standard image (requires external PostgreSQL / docker-compose) ────────
+      - name: Extract metadata (standard)
         id: meta
         uses: docker/metadata-action@v5
         with:
@@ -39,16 +43,36 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest,enable={{is_default_branch}}
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build and push
+      - name: Build and push (standard)
         uses: docker/build-push-action@v5
         with:
           context: .
+          file: Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
+
+      # ── Standalone image (PostgreSQL + JWT auto-generated, just docker run) ───
+      - name: Extract metadata (standalone)
+        id: meta-standalone
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=standalone
+            type=raw,value=standalone-{{branch}}
+
+      - name: Build and push (standalone)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.standalone
+          push: true
+          tags: ${{ steps.meta-standalone.outputs.tags }}
+          labels: ${{ steps.meta-standalone.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64,linux/arm64
