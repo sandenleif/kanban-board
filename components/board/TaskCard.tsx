@@ -5,13 +5,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { cn, formatDate, isOverdue, PRIORITY_COLORS } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { getInitials } from "@/lib/utils";
-import {
-  MessageSquare,
-  CheckSquare,
-  CalendarClock,
-  GripVertical,
-  AlertTriangle,
-} from "lucide-react";
+import { MessageSquare, CheckSquare, CalendarClock, AlertTriangle } from "lucide-react";
 import type { TaskType } from "./BoardView";
 
 interface TaskCardProps {
@@ -43,25 +37,17 @@ export function TaskCard({ task, isDragging, canEdit, onTaskClick }: TaskCardPro
     <div
       ref={setNodeRef}
       style={style}
+      {...(canEdit ? attributes : {})}
+      {...(canEdit ? listeners : {})}
       className={cn(
-        "group relative rounded-lg border border-border bg-card p-3 shadow-sm cursor-pointer transition-all hover:border-primary/30 hover:shadow-md",
+        "group relative rounded-lg border border-border bg-card p-3 shadow-sm transition-all hover:border-primary/30 hover:shadow-md",
+        canEdit ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
         isDragging && "shadow-2xl border-primary/50 rotate-2 scale-105",
         isSortableDragging && "border-primary/30"
       )}
       onClick={() => onTaskClick(task)}
     >
-      {canEdit && (
-        <div
-          {...attributes}
-          {...listeners}
-          className="absolute left-1 top-3 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing touch-none"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <GripVertical className="h-4 w-4 text-muted-foreground/50" />
-        </div>
-      )}
-
-      <div className="pl-3">
+      <div>
         {task.labels.length > 0 && (
           <div className="flex gap-1 mb-2 flex-wrap">
             {task.labels.slice(0, 4).map(({ label }) => (
