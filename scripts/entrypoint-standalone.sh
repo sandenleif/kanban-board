@@ -51,7 +51,8 @@ EOF
 rm -f "$PG_DATA/postmaster.pid"
 
 echo "🐘 Starting PostgreSQL..."
-su-exec postgres pg_ctl -D "$PG_DATA" -o "-h 127.0.0.1 -p 5432" \
+su-exec postgres pg_ctl -D "$PG_DATA" \
+  -o "-h 127.0.0.1 -p 5432 -c unix_socket_directories=''" \
   -l "$PG_DATA/postgres.log" start
 
 until su-exec postgres pg_isready -h 127.0.0.1 -p 5432 -q; do
