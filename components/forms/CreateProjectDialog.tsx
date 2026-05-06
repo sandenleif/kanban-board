@@ -1,18 +1,13 @@
 "use client";
 
 import { useActionState } from "react";
+import { useTranslations } from "next-intl";
 import { createProjectAction } from "@/actions/project";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { AlertCircle, Loader2 } from "lucide-react";
 
 interface CreateProjectDialogProps {
@@ -21,21 +16,16 @@ interface CreateProjectDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-export function CreateProjectDialog({
-  workspaceId,
-  open,
-  onOpenChange,
-}: CreateProjectDialogProps) {
+export function CreateProjectDialog({ workspaceId, open, onOpenChange }: CreateProjectDialogProps) {
+  const t = useTranslations("workspace");
   const [state, action, isPending] = useActionState(createProjectAction, {});
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>New project</DialogTitle>
-          <DialogDescription>
-            Creates a Kanban board with default columns (Backlog → Done).
-          </DialogDescription>
+          <DialogTitle>{t("createProjectTitle")}</DialogTitle>
+          <DialogDescription>{t("createProjectDesc")}</DialogDescription>
         </DialogHeader>
 
         <form action={action} className="space-y-4">
@@ -49,32 +39,22 @@ export function CreateProjectDialog({
           )}
 
           <div className="space-y-1.5">
-            <Label htmlFor="proj-name">Project name</Label>
-            <Input id="proj-name" name="name" placeholder="Website Redesign" required />
+            <Label htmlFor="proj-name">{t("projectName")}</Label>
+            <Input id="proj-name" name="name" placeholder={t("projectNamePlaceholder")} required />
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="proj-desc">Description (optional)</Label>
-            <Textarea
-              id="proj-desc"
-              name="description"
-              placeholder="What is this project about?"
-              rows={3}
-            />
+            <Label htmlFor="proj-desc">{t("optionalDesc")}</Label>
+            <Textarea id="proj-desc" name="description" placeholder={t("projectDescPlaceholder")} rows={3} />
           </div>
 
           <div className="flex justify-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              disabled={isPending}
-            >
-              Cancel
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
+              {t("cancel")}
             </Button>
             <Button type="submit" disabled={isPending}>
               {isPending && <Loader2 className="animate-spin" />}
-              Create project
+              {t("createProject")}
             </Button>
           </div>
         </form>

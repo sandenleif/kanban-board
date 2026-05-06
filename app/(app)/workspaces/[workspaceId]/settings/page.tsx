@@ -2,16 +2,14 @@ import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { requireWorkspaceMember } from "@/lib/permissions";
 import { notFound } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { canAdmin } from "@/lib/utils";
 import { WorkspaceSettingsClient } from "@/components/workspace/WorkspaceSettingsClient";
 
-export default async function WorkspaceSettingsPage({
-  params,
-}: {
-  params: Promise<{ workspaceId: string }>;
-}) {
+export default async function WorkspaceSettingsPage({ params }: { params: Promise<{ workspaceId: string }> }) {
   const { workspaceId } = await params;
   const session = await requireSession();
+  const t = await getTranslations("workspace");
 
   const member = await requireWorkspaceMember(workspaceId, session.userId).catch(() => null);
   if (!member) notFound();
@@ -24,7 +22,7 @@ export default async function WorkspaceSettingsPage({
 
   return (
     <div className="max-w-3xl mx-auto animate-in">
-      <h1 className="text-2xl font-semibold text-foreground mb-6">Workspace Settings</h1>
+      <h1 className="text-2xl font-semibold text-foreground mb-6">{t("settingsTitle")}</h1>
       <WorkspaceSettingsClient
         workspace={member.workspace}
         members={members}
