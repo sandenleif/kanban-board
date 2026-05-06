@@ -43,6 +43,7 @@
     "jose": "^5.9.6",
     "lucide-react": "^0.469.0",
     "next": "^16.2.4",
+    "next-intl": "^4.11.0",
     "postcss": "^8",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

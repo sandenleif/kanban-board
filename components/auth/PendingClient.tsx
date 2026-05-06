@@ -2,24 +2,22 @@
 
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { logoutAction } from "@/actions/auth";
 import { Button } from "@/components/ui/button";
 import { Clock, LogOut, RefreshCw } from "lucide-react";
 
 export function PendingClient({ name, email }: { name: string; email: string }) {
+  const t = useTranslations("pending");
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
   const handleRefresh = () => {
-    startTransition(() => {
-      router.refresh();
-    });
+    startTransition(() => { router.refresh(); });
   };
 
   const handleLogout = () => {
-    startTransition(async () => {
-      await logoutAction();
-    });
+    startTransition(async () => { await logoutAction(); });
   };
 
   return (
@@ -40,45 +38,33 @@ export function PendingClient({ name, email }: { name: string; email: string }) 
             <Clock className="h-8 w-8 text-yellow-400" />
           </div>
 
-          <h1 className="text-xl font-semibold text-foreground mb-2">
-            Waiting for approval
-          </h1>
+          <h1 className="text-xl font-semibold text-foreground mb-2">{t("title")}</h1>
           <p className="text-sm text-muted-foreground mb-1">
-            Hey <strong className="text-foreground">{name}</strong>, your account has been created.
+            {t("greeting", { name })}
           </p>
           <p className="text-sm text-muted-foreground mb-6">
-            An administrator needs to approve{" "}
-            <span className="text-foreground font-mono text-xs bg-muted px-1.5 py-0.5 rounded">
-              {email}
-            </span>{" "}
-            before you can access the system.
+            {t.rich("waitingFor", {
+              email: () => (
+                <span className="text-foreground font-mono text-xs bg-muted px-1.5 py-0.5 rounded">
+                  {email}
+                </span>
+              ),
+            })}
           </p>
 
           <div className="space-y-2">
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={handleRefresh}
-              disabled={isPending}
-            >
+            <Button variant="outline" className="w-full" onClick={handleRefresh} disabled={isPending}>
               <RefreshCw className={`h-4 w-4 ${isPending ? "animate-spin" : ""}`} />
-              Check approval status
+              {t("checkStatus")}
             </Button>
-            <Button
-              variant="ghost"
-              className="w-full text-muted-foreground"
-              onClick={handleLogout}
-              disabled={isPending}
-            >
+            <Button variant="ghost" className="w-full text-muted-foreground" onClick={handleLogout} disabled={isPending}>
               <LogOut className="h-4 w-4" />
-              Sign out
+              {t("signOut")}
             </Button>
           </div>
         </div>
 
-        <p className="text-xs text-muted-foreground mt-4">
-          Contact your administrator if you need access urgently.
-        </p>
+        <p className="text-xs text-muted-foreground mt-4">{t("contactAdmin")}</p>
       </div>
     </div>
   );

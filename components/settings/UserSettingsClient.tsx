@@ -1,6 +1,7 @@
 "use client";
 
 import { useTransition, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { updateProfileAction, updatePasswordAction, uploadAvatarAction, removeAvatarAction } from "@/actions/user";
@@ -22,6 +23,8 @@ interface User {
 }
 
 export function UserSettingsClient({ user }: { user: User }) {
+  const t = useTranslations("settings");
+  const c = useTranslations("common");
   const [isPending, startTransition] = useTransition();
   const [avatarPreview, setAvatarPreview] = useState<string | null>(
     user.avatarBase64 && user.avatarMimeType
@@ -35,7 +38,7 @@ export function UserSettingsClient({ user }: { user: User }) {
     startTransition(async () => {
       const result = await updateProfileAction(formData);
       if (result?.error) toast.error(result.error);
-      else toast.success("Profile updated");
+      else toast.success(t("saveChanges"));
     });
   };
 
@@ -43,19 +46,13 @@ export function UserSettingsClient({ user }: { user: User }) {
     startTransition(async () => {
       const result = await updatePasswordAction(formData);
       if (result?.error) toast.error(result.error);
-      else toast.success("Password changed");
+      else toast.success(t("passwordTitle"));
     });
   };
 
   const handleAvatarFile = (file: File) => {
-    if (!file.type.startsWith("image/")) {
-      toast.error("Only image files are allowed");
-      return;
-    }
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error("Max file size is 2 MB");
-      return;
-    }
+    if (!file.type.startsWith("image/")) { toast.error("Only image files are allowed"); return; }
+    if (file.size > 2 * 1024 * 1024) { toast.error("Max file size is 2 MB"); return; }
 
     const reader = new FileReader();
     reader.onload = (e) => setAvatarPreview(e.target?.result as string);
@@ -66,26 +63,17 @@ export function UserSettingsClient({ user }: { user: User }) {
 
     startTransition(async () => {
       const result = await uploadAvatarAction(formData);
-      if (result.error) {
-        toast.error(result.error);
-        setAvatarPreview(null);
-      } else {
-        toast.success("Profile picture updated");
-        router.refresh();
-      }
+      if (result.error) { toast.error(result.error); setAvatarPreview(null); }
+      else { toast.success(t("avatarUpdated")); router.refresh(); }
     });
   };
 
   const handleAvatarRemove = () => {
-    if (!confirm("Remove your profile picture?")) return;
+    if (!confirm(t("avatarConfirmRemove"))) return;
     startTransition(async () => {
       const result = await removeAvatarAction();
       if (result.error) toast.error(result.error);
-      else {
-        setAvatarPreview(null);
-        toast.success("Profile picture removed");
-        router.refresh();
-      }
+      else { setAvatarPreview(null); toast.success(t("avatarRemoved")); router.refresh(); }
     });
   };
 
@@ -93,8 +81,8 @@ export function UserSettingsClient({ user }: { user: User }) {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Profile</CardTitle>
-          <CardDescription>Update your personal information.</CardDescription>
+          <CardTitle>{t("profileTitle")}</CardTitle>
+          <CardDescription>{t("profileDesc")}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex items-center gap-4 mb-6">
@@ -118,56 +106,39 @@ export function UserSettingsClient({ user }: { user: User }) {
                   e.target.value = "";
                 }}
               />
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => avatarInputRef.current?.click()}
-                disabled={isPending}
-              >
+              <Button variant="outline" size="sm" onClick={() => avatarInputRef.current?.click()} disabled={isPending}>
                 {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                {avatarPreview ? "Replace picture" : "Upload picture"}
+                {avatarPreview ? t("avatarReplace") : t("avatarUpload")}
               </Button>
               {avatarPreview && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-destructive hover:text-destructive"
-                  onClick={handleAvatarRemove}
-                  disabled={isPending}
-                >
+                <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={handleAvatarRemove} disabled={isPending}>
                   <Trash2 className="h-4 w-4" />
-                  Remove
+                  {t("avatarRemove")}
                 </Button>
               )}
-              <p className="text-xs text-muted-foreground">PNG, JPG, GIF — max 2 MB</p>
+              <p className="text-xs text-muted-foreground">{t("avatarHint")}</p>
             </div>
             <div>
               <p className="font-semibold text-foreground">{user.name}</p>
               <p className="text-sm text-muted-foreground">{user.email}</p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Member since {formatDate(user.createdAt)}
+                {t("memberSince")} {formatDate(user.createdAt)}
               </p>
             </div>
           </div>
 
           <form action={handleProfile} className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="name">Full name</Label>
+              <Label htmlFor="name">{c("fullName")}</Label>
               <Input id="name" name="name" defaultValue={user.name} required />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                name="email"
-                type="email"
-                defaultValue={user.email}
-                required
-              />
+              <Label htmlFor="email">{c("email")}</Label>
+              <Input id="email" name="email" type="email" defaultValue={user.email} required />
             </div>
             <Button type="submit" disabled={isPending}>
               {isPending && <Loader2 className="animate-spin" />}
-              Save changes
+              {t("saveChanges")}
             </Button>
           </form>
         </CardContent>
@@ -175,33 +146,22 @@ export function UserSettingsClient({ user }: { user: User }) {
 
       <Card>
         <CardHeader>
-          <CardTitle>Password</CardTitle>
-          <CardDescription>Change your account password.</CardDescription>
+          <CardTitle>{t("passwordTitle")}</CardTitle>
+          <CardDescription>{t("passwordDesc")}</CardDescription>
         </CardHeader>
         <CardContent>
           <form action={handlePassword} className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="currentPassword">Current password</Label>
-              <Input
-                id="currentPassword"
-                name="currentPassword"
-                type="password"
-                required
-              />
+              <Label htmlFor="currentPassword">{t("currentPassword")}</Label>
+              <Input id="currentPassword" name="currentPassword" type="password" required />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="newPassword">New password</Label>
-              <Input
-                id="newPassword"
-                name="newPassword"
-                type="password"
-                minLength={8}
-                required
-              />
+              <Label htmlFor="newPassword">{t("newPassword")}</Label>
+              <Input id="newPassword" name="newPassword" type="password" minLength={8} required />
             </div>
             <Button type="submit" disabled={isPending}>
               {isPending && <Loader2 className="animate-spin" />}
-              Update password
+              {t("updatePassword")}
             </Button>
           </form>
         </CardContent>

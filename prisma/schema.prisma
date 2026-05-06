@@ -54,6 +54,7 @@ model AppSettings {
   id           String   @id @default("singleton")
   logoBase64   String?  @db.Text
   logoMimeType String?
+  locale       String   @default("en")
   updatedAt    DateTime @updatedAt
 
   @@map("app_settings")

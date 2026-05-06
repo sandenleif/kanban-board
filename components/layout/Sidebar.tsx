@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import {
   LayoutDashboard,
   FolderKanban,
@@ -19,19 +20,10 @@ import { CreateWorkspaceDialog } from "@/components/forms/CreateWorkspaceDialog"
 import type { SessionPayload } from "@/lib/auth";
 import type { WorkspaceRole } from "@prisma/client";
 
-interface Project {
-  id: string;
-  name: string;
-}
-
+interface Project { id: string; name: string }
 interface WorkspaceWithProjects {
-  id: string;
-  name: string;
-  slug: string;
-  role: WorkspaceRole;
-  projects: Project[];
+  id: string; name: string; slug: string; role: WorkspaceRole; projects: Project[];
 }
-
 interface SidebarProps {
   workspaces: WorkspaceWithProjects[];
   session: SessionPayload;
@@ -40,6 +32,7 @@ interface SidebarProps {
 }
 
 export function Sidebar({ workspaces, session: _, isAdmin, logoSrc }: SidebarProps) {
+  const t = useTranslations("nav");
   const pathname = usePathname();
   const [expandedWorkspaces, setExpandedWorkspaces] = useState<Set<string>>(
     new Set(workspaces.map((w) => w.id))
@@ -49,8 +42,7 @@ export function Sidebar({ workspaces, session: _, isAdmin, logoSrc }: SidebarPro
   const toggleWorkspace = (id: string) => {
     setExpandedWorkspaces((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
   };
@@ -60,11 +52,7 @@ export function Sidebar({ workspaces, session: _, isAdmin, logoSrc }: SidebarPro
       <aside className="flex h-full w-60 flex-col border-r border-sidebar-border bg-sidebar">
         <div className="flex items-center gap-2 px-4 py-4 border-b border-sidebar-border min-h-[57px]">
           {logoSrc ? (
-            <img
-              src={logoSrc}
-              alt="Company logo"
-              className="h-8 max-w-[140px] object-contain"
-            />
+            <img src={logoSrc} alt="Company logo" className="h-8 max-w-[140px] object-contain" />
           ) : (
             <>
               <div className="w-7 h-7 rounded-md bg-primary flex items-center justify-center shrink-0">
@@ -90,7 +78,7 @@ export function Sidebar({ workspaces, session: _, isAdmin, logoSrc }: SidebarPro
               )}
             >
               <LayoutDashboard className="h-4 w-4 shrink-0" />
-              Dashboard
+              {t("dashboard")}
             </Link>
           </div>
 
@@ -105,13 +93,13 @@ export function Sidebar({ workspaces, session: _, isAdmin, logoSrc }: SidebarPro
               )}
             >
               <Building2 className="h-4 w-4 shrink-0" />
-              Workspaces
+              {t("workspaces")}
             </Link>
           </div>
 
           <div className="mt-4 px-4 mb-1 flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/60">
-              Workspaces
+              {t("workspaces")}
             </span>
             <Button
               variant="ghost"
@@ -119,7 +107,7 @@ export function Sidebar({ workspaces, session: _, isAdmin, logoSrc }: SidebarPro
               className="h-5 w-5 text-muted-foreground hover:text-foreground"
               type="button"
               onClick={() => setShowCreateWorkspace(true)}
-              title="New workspace"
+              title={t("newWorkspace")}
             >
               <Plus className="h-3.5 w-3.5" />
             </Button>
@@ -127,7 +115,7 @@ export function Sidebar({ workspaces, session: _, isAdmin, logoSrc }: SidebarPro
 
           <div className="px-2 flex-1">
             {workspaces.length === 0 ? (
-              <p className="px-2.5 py-2 text-xs text-muted-foreground">No workspaces yet</p>
+              <p className="px-2.5 py-2 text-xs text-muted-foreground">{t("noWorkspaces")}</p>
             ) : (
               workspaces.map((workspace) => (
                 <div key={workspace.id} className="mb-1">
@@ -160,7 +148,7 @@ export function Sidebar({ workspaces, session: _, isAdmin, logoSrc }: SidebarPro
                         )}
                       >
                         <FolderKanban className="h-3.5 w-3.5 shrink-0" />
-                        Projects
+                        {t("projects")}
                       </Link>
 
                       {workspace.projects.map((project) => (
@@ -198,7 +186,7 @@ export function Sidebar({ workspaces, session: _, isAdmin, logoSrc }: SidebarPro
               )}
             >
               <ShieldCheck className="h-4 w-4 shrink-0" />
-              User Management
+              {t("userManagement")}
             </Link>
           )}
           <Link
@@ -211,7 +199,7 @@ export function Sidebar({ workspaces, session: _, isAdmin, logoSrc }: SidebarPro
             )}
           >
             <Settings className="h-4 w-4 shrink-0" />
-            Settings
+            {t("settings")}
           </Link>
         </div>
       </aside>

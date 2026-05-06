@@ -1,13 +1,9 @@
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getTranslations } from "next-intl/server";
 import Link from "next/link";
 import {
-  CheckCircle2,
-  Clock,
-  AlertTriangle,
-  ListTodo,
-  TrendingUp,
-  FolderKanban,
+  CheckCircle2, Clock, AlertTriangle, ListTodo, TrendingUp, FolderKanban,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -15,23 +11,16 @@ import { formatDate, isOverdue, PRIORITY_COLORS, PRIORITY_LABELS } from "@/lib/u
 
 export default async function DashboardPage() {
   const session = await requireSession();
+  const t = await getTranslations("dashboard");
 
   const [myTasks, workspaceMembers, taskStats] = await Promise.all([
     prisma.task.findMany({
       where: {
         OR: [{ createdById: session.userId }, { assigneeId: session.userId }],
-        column: {
-          section: { project: { status: "ACTIVE" } },
-        },
+        column: { section: { project: { status: "ACTIVE" } } },
       },
       include: {
-        column: {
-          include: {
-            section: {
-              include: { project: { include: { workspace: true } } },
-            },
-          },
-        },
+        column: { include: { section: { include: { project: { include: { workspace: true } } } } } },
         labels: { include: { label: true } },
         assignee: true,
       },
@@ -43,9 +32,7 @@ export default async function DashboardPage() {
       include: {
         workspace: {
           include: {
-            projects: {
-              where: { status: "ACTIVE" },
-            },
+            projects: { where: { status: "ACTIVE" } },
             _count: { select: { members: true } },
           },
         },
@@ -63,7 +50,6 @@ export default async function DashboardPage() {
 
   const now = new Date();
   const soon = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
-
   const openTasks = myTasks.filter((t) => t.column.name !== "Done");
   const doneTasks = myTasks.filter((t) => t.column.name === "Done");
   const overdueTasks = openTasks.filter((t) => t.dueDate && new Date(t.dueDate) < now);
@@ -71,23 +57,24 @@ export default async function DashboardPage() {
     (t) => t.dueDate && new Date(t.dueDate) >= now && new Date(t.dueDate) <= soon
   );
 
+  const h = new Date().getHours();
+  const greeting = h < 12 ? t("greetingMorning") : h < 18 ? t("greetingAfternoon") : t("greetingEvening");
+
   const stats = [
-    { label: "Open Tasks", value: openTasks.length, icon: ListTodo, color: "text-blue-400", bg: "bg-blue-400/10" },
-    { label: "Completed", value: doneTasks.length, icon: CheckCircle2, color: "text-green-400", bg: "bg-green-400/10" },
-    { label: "Due Soon", value: dueSoonTasks.length, icon: Clock, color: "text-yellow-400", bg: "bg-yellow-400/10" },
-    { label: "Overdue", value: overdueTasks.length, icon: AlertTriangle, color: "text-red-400", bg: "bg-red-400/10" },
+    { label: t("openTasks"),  value: openTasks.length,   icon: ListTodo,      color: "text-blue-400",   bg: "bg-blue-400/10" },
+    { label: t("completed"),  value: doneTasks.length,   icon: CheckCircle2,  color: "text-green-400",  bg: "bg-green-400/10" },
+    { label: t("dueSoon"),    value: dueSoonTasks.length, icon: Clock,        color: "text-yellow-400", bg: "bg-yellow-400/10" },
+    { label: t("overdue"),    value: overdueTasks.length, icon: AlertTriangle, color: "text-red-400",   bg: "bg-red-400/10" },
   ];
 
   return (
     <div className="max-w-6xl mx-auto space-y-8 animate-in">
       <div>
         <h1 className="text-2xl font-semibold text-foreground">
-          Good {getGreeting()},{" "}
+          {greeting},{" "}
           <span className="text-primary">{session.name.split(" ")[0]}</span>
         </h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          Here&apos;s what&apos;s happening across your workspaces.
-        </p>
+        <p className="text-muted-foreground text-sm mt-1">{t("subtitle")}</p>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -112,15 +99,15 @@ export default async function DashboardPage() {
         <div className="lg:col-span-2 space-y-4">
           <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
             <TrendingUp className="h-4 w-4 text-primary" />
-            My Tasks
+            {t("myTasks")}
           </h2>
 
           {openTasks.length === 0 ? (
             <Card>
               <CardContent className="p-8 text-center">
                 <CheckCircle2 className="h-10 w-10 text-green-400 mx-auto mb-3" />
-                <p className="text-sm font-medium text-foreground">All caught up!</p>
-                <p className="text-xs text-muted-foreground mt-1">No open tasks assigned to you.</p>
+                <p className="text-sm font-medium text-foreground">{t("allCaughtUp")}</p>
+                <p className="text-xs text-muted-foreground mt-1">{t("noOpenTasks")}</p>
               </CardContent>
             </Card>
           ) : (
@@ -129,10 +116,7 @@ export default async function DashboardPage() {
                 const project = task.column.section.project;
                 const workspace = project.workspace;
                 return (
-                  <Link
-                    key={task.id}
-                    href={`/workspaces/${workspace.id}/projects/${project.id}/board`}
-                  >
+                  <Link key={task.id} href={`/workspaces/${workspace.id}/projects/${project.id}/board`}>
                     <Card className="hover:border-primary/30 transition-colors cursor-pointer group">
                       <CardContent className="p-4">
                         <div className="flex items-start justify-between gap-3">
@@ -145,7 +129,7 @@ export default async function DashboardPage() {
                                 {workspace.name} · {project.name}
                               </span>
                               <span className="text-xs text-muted-foreground">
-                                in <em>{task.column.name}</em>
+                                {t("in")} <em>{task.column.name}</em>
                               </span>
                             </div>
                             {task.labels.length > 0 && (
@@ -168,7 +152,7 @@ export default async function DashboardPage() {
                             </span>
                             {task.dueDate && (
                               <span className={`text-xs ${isOverdue(task.dueDate) ? "text-red-400" : "text-muted-foreground"}`}>
-                                {isOverdue(task.dueDate) ? "Overdue · " : ""}
+                                {isOverdue(task.dueDate) ? t("overduePrefix") : ""}
                                 {formatDate(task.dueDate)}
                               </span>
                             )}
@@ -186,13 +170,13 @@ export default async function DashboardPage() {
         <div className="space-y-4">
           <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
             <FolderKanban className="h-4 w-4 text-primary" />
-            My Workspaces
+            {t("myWorkspaces")}
           </h2>
 
           {workspaceMembers.length === 0 ? (
             <Card>
               <CardContent className="p-6 text-center">
-                <p className="text-sm text-muted-foreground">No workspaces yet.</p>
+                <p className="text-sm text-muted-foreground">{t("noWorkspaces")}</p>
               </CardContent>
             </Card>
           ) : (
@@ -207,15 +191,11 @@ export default async function DashboardPage() {
                             {workspace.name}
                           </p>
                           <p className="text-xs text-muted-foreground mt-0.5">
-                            {workspace.projects.length} project
-                            {workspace.projects.length !== 1 ? "s" : ""} ·{" "}
-                            {workspace._count.members} member
-                            {workspace._count.members !== 1 ? "s" : ""}
+                            {workspace.projects.length} project{workspace.projects.length !== 1 ? "s" : ""} ·{" "}
+                            {workspace._count.members} member{workspace._count.members !== 1 ? "s" : ""}
                           </p>
                         </div>
-                        <Badge variant="secondary" className="text-xs shrink-0">
-                          {role}
-                        </Badge>
+                        <Badge variant="secondary" className="text-xs shrink-0">{role}</Badge>
                       </div>
                     </CardContent>
                   </Card>
@@ -226,7 +206,7 @@ export default async function DashboardPage() {
 
           {taskStats.length > 0 && (
             <div className="mt-6">
-              <h2 className="text-sm font-semibold text-foreground mb-3">Tasks by Priority</h2>
+              <h2 className="text-sm font-semibold text-foreground mb-3">{t("tasksByPriority")}</h2>
               <Card>
                 <CardContent className="p-4 space-y-3">
                   {taskStats.map((s) => (
@@ -234,9 +214,7 @@ export default async function DashboardPage() {
                       <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${PRIORITY_COLORS[s.priority]}`}>
                         {PRIORITY_LABELS[s.priority]}
                       </span>
-                      <span className="text-sm font-semibold text-foreground">
-                        {s._count.id}
-                      </span>
+                      <span className="text-sm font-semibold text-foreground">{s._count.id}</span>
                     </div>
                   ))}
                 </CardContent>
@@ -247,11 +225,4 @@ export default async function DashboardPage() {
       </div>
     </div>
   );
-}
-
-function getGreeting() {
-  const h = new Date().getHours();
-  if (h < 12) return "morning";
-  if (h < 18) return "afternoon";
-  return "evening";
 }

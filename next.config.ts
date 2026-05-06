@@ -1,24 +1,20 @@
 import type { NextConfig } from "next";
+import createNextIntlPlugin from "next-intl/plugin";
+
+const withNextIntl = createNextIntlPlugin("./i18n/request.ts");
 
 const isProd = process.env.NODE_ENV === "production";
 
 const securityHeaders = [
-  // Block clickjacking
   { key: "X-Frame-Options", value: "DENY" },
-  // Prevent MIME sniffing
   { key: "X-Content-Type-Options", value: "nosniff" },
-  // XSS filter (legacy browsers)
   { key: "X-XSS-Protection", value: "1; mode=block" },
-  // Referrer leakage control
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-  // Disable browser features we don't use
   {
     key: "Permissions-Policy",
     value: "camera=(), microphone=(), geolocation=(), interest-cohort=()",
   },
-  // DNS prefetch control
   { key: "X-DNS-Prefetch-Control", value: "on" },
-  // HSTS (only in production — not for HTTP local dev)
   ...(isProd
     ? [
         {
@@ -51,8 +47,7 @@ const nextConfig: NextConfig = {
     ];
   },
 
-  // Strip server-side error details from client in production
   serverExternalPackages: ["@prisma/client", "bcryptjs"],
 };
 
-export default nextConfig;
+export default withNextIntl(nextConfig);

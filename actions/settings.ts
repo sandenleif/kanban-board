@@ -49,6 +49,20 @@ export async function removeLogoAction(): Promise<ActionResult> {
   return { success: true };
 }
 
+export async function updateLocaleAction(locale: string): Promise<ActionResult> {
+  await requireAdmin();
+  if (!["en", "de", "fr", "es"].includes(locale)) return { error: "Invalid locale" };
+
+  await prisma.appSettings.upsert({
+    where: { id: "singleton" },
+    create: { id: "singleton", locale },
+    update: { locale },
+  });
+
+  revalidatePath("/", "layout");
+  return { success: true };
+}
+
 export async function getLogoAction() {
   const settings = await prisma.appSettings.findUnique({
     where: { id: "singleton" },

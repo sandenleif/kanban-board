@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { useTranslations } from "next-intl";
 import { loginAction } from "@/actions/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +9,8 @@ import { Label } from "@/components/ui/label";
 import { AlertCircle, Loader2 } from "lucide-react";
 
 export function LoginForm() {
+  const t = useTranslations("login");
+  const c = useTranslations("common");
   const [state, action, isPending] = useActionState(loginAction, {});
 
   return (
@@ -20,19 +23,19 @@ export function LoginForm() {
       )}
 
       <div className="space-y-1.5">
-        <Label htmlFor="email">Email</Label>
+        <Label htmlFor="email">{c("email")}</Label>
         <Input
           id="email"
           name="email"
           type="email"
-          placeholder="you@example.com"
+          placeholder={t("emailPlaceholder")}
           autoComplete="email"
           required
         />
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor="password">Password</Label>
+        <Label htmlFor="password">{c("password")}</Label>
         <Input
           id="password"
           name="password"
@@ -45,9 +48,8 @@ export function LoginForm() {
 
       <Button type="submit" className="w-full" disabled={isPending}>
         {isPending && <Loader2 className="animate-spin" />}
-        Sign in
+        {t("submit")}
       </Button>
-
     </form>
   );
 }
