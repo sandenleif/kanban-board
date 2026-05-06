@@ -31,7 +31,9 @@ WORKDIR /app
 # Install PostgreSQL and su-exec for privilege dropping
 RUN apk add --no-cache libc6-compat openssl postgresql16 su-exec && \
     addgroup --system --gid 1001 nodejs && \
-    adduser --system --uid 1001 nextjs
+    adduser --system --uid 1001 nextjs && \
+    mkdir -p /run/postgresql && \
+    chown postgres:postgres /run/postgresql
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
