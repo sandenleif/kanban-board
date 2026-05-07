@@ -63,7 +63,7 @@ export async function createTaskAction(
     },
   });
 
-  revalidatePath(`/workspaces`);
+  revalidatePath(`/workspaces`, "layout");
   return { success: true, taskId: task.id };
 }
 
@@ -114,7 +114,7 @@ export async function updateTaskAction(
     },
   });
 
-  revalidatePath(`/workspaces`);
+  revalidatePath(`/workspaces`, "layout");
   return { success: true };
 }
 
@@ -193,7 +193,7 @@ export async function moveTaskAction(data: {
     }
   });
 
-  revalidatePath(`/workspaces`);
+  revalidatePath(`/workspaces`, "layout");
   return { success: true };
 }
 
@@ -204,7 +204,7 @@ export async function deleteTaskAction(taskId: string, projectId: string): Promi
 
   await prisma.task.delete({ where: { id: taskId } });
 
-  revalidatePath(`/workspaces`);
+  revalidatePath(`/workspaces`, "layout");
   return { success: true };
 }
 
@@ -245,7 +245,7 @@ export async function addCommentAction(
     },
   });
 
-  revalidatePath(`/workspaces`);
+  revalidatePath(`/workspaces`, "layout");
   return { success: true };
 }
 
@@ -263,7 +263,7 @@ export async function deleteCommentAction(
   }
 
   await prisma.taskComment.delete({ where: { id: commentId } });
-  revalidatePath(`/workspaces`);
+  revalidatePath(`/workspaces`, "layout");
   return { success: true };
 }
 
@@ -290,7 +290,7 @@ export async function addChecklistItemAction(
     },
   });
 
-  revalidatePath(`/workspaces`);
+  revalidatePath(`/workspaces`, "layout");
   return { success: true };
 }
 
@@ -310,7 +310,7 @@ export async function toggleChecklistItemAction(
     data: { completed: !item.completed },
   });
 
-  revalidatePath(`/workspaces`);
+  revalidatePath(`/workspaces`, "layout");
   return { success: true };
 }
 
@@ -323,7 +323,7 @@ export async function deleteChecklistItemAction(
   if (!canEdit(member.role)) return { error: "Insufficient permissions" };
 
   await prisma.taskChecklistItem.delete({ where: { id: itemId } });
-  revalidatePath(`/workspaces`);
+  revalidatePath(`/workspaces`, "layout");
   return { success: true };
 }
 
@@ -342,7 +342,7 @@ export async function addLabelAction(
     update: {},
   });
 
-  revalidatePath(`/workspaces`);
+  revalidatePath(`/workspaces`, "layout");
   return { success: true };
 }
 
@@ -359,7 +359,7 @@ export async function removeLabelAction(
     where: { taskId_labelId: { taskId, labelId } },
   });
 
-  revalidatePath(`/workspaces`);
+  revalidatePath(`/workspaces`, "layout");
   return { success: true };
 }
 
@@ -375,6 +375,6 @@ export async function createLabelAction(
     data: { name: data.name, color: data.color, projectId },
   });
 
-  revalidatePath(`/workspaces`);
+  revalidatePath(`/workspaces`, "layout");
   return { success: true, labelId: label.id };
 }

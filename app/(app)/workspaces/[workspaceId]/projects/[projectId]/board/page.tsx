@@ -7,6 +7,8 @@ import { canEdit } from "@/lib/utils";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 
+export const dynamic = "force-dynamic";
+
 export default async function BoardPage({
   params,
 }: {
