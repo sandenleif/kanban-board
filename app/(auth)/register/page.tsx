@@ -4,6 +4,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { RegisterForm } from "@/components/forms/RegisterForm";
+import { isEnterprise } from "@/lib/enterprise";
 
 export default async function RegisterPage({
   searchParams,
@@ -12,7 +13,7 @@ export default async function RegisterPage({
 }) {
   const { org } = await searchParams;
 
-  if (!org) redirect("/register/org");
+  if (!org && isEnterprise) redirect("/register/org");
 
   const organization = await prisma.organization.findUnique({
     where: { slug: org },

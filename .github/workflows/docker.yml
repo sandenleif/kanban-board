@@ -76,3 +76,25 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64,linux/arm64
+
+      # ── Enterprise image (multi-tenant, PostgreSQL + JWT auto-generated) ───────
+      - name: Extract metadata (enterprise)
+        id: meta-enterprise
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=enterprise
+            type=raw,value=enterprise-{{branch}}
+
+      - name: Build and push (enterprise)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.enterprise
+          push: true
+          tags: ${{ steps.meta-enterprise.outputs.tags }}
+          labels: ${{ steps.meta-enterprise.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64

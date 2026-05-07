@@ -8,6 +8,7 @@ import { createSession, clearSession } from "@/lib/auth";
 import { generateSlug } from "@/lib/utils";
 import { loginSchema, registerSchema } from "@/lib/validations/auth";
 import { checkRateLimit } from "@/lib/ratelimit";
+import { isEnterprise } from "@/lib/enterprise";
 
 export type ActionResult = {
   error?: string;
@@ -42,6 +43,33 @@ export async function setupAdminAction(
   if (!parsed.success) return { error: parsed.error.errors[0].message };
 
   const hashed = await bcrypt.hash(parsed.data.password, 12);
+
+  if (isEnterprise) {
+    // Enterprise: super admin floats above all orgs
+    const user = await prisma.user.create({
+      data: {
+        name: parsed.data.name,
+        email: parsed.data.email,
+        password: hashed,
+        status: "ACTIVE",
+        isAdmin: true,
+        isSuperAdmin: true,
+        organizationId: null,
+      },
+    });
+    await createSession({ userId: user.id, email: user.email, name: user.name, organizationId: null, isSuperAdmin: true });
+    redirect("/super-admin");
+  }
+
+  // Standalone: create default org + admin + workspace
+  const rawLocale = formData.get("locale") as string | null;
+  const locale = ["en", "de", "fr", "es"].includes(rawLocale ?? "") ? rawLocale! : "en";
+
+  const org = await prisma.organization.create({
+    data: { name: "Default", slug: "default" },
+  });
+  await prisma.appSettings.create({ data: { organizationId: org.id, locale } });
+
   const user = await prisma.user.create({
     data: {
       name: parsed.data.name,
@@ -49,19 +77,23 @@ export async function setupAdminAction(
       password: hashed,
       status: "ACTIVE",
       isAdmin: true,
-      isSuperAdmin: true,
-      organizationId: null,
+      isSuperAdmin: false,
+      organizationId: org.id,
     },
   });
 
-  await createSession({
-    userId: user.id,
-    email: user.email,
-    name: user.name,
-    organizationId: null,
-    isSuperAdmin: true,
+  const workspace = await prisma.workspace.create({
+    data: {
+      name: `${user.name}'s Workspace`,
+      slug: generateSlug(`${user.name}s workspace`),
+      ownerId: user.id,
+      organizationId: org.id,
+      members: { create: { userId: user.id, role: "OWNER" } },
+    },
   });
-  redirect("/super-admin");
+
+  await createSession({ userId: user.id, email: user.email, name: user.name, organizationId: org.id, isSuperAdmin: false });
+  redirect(`/workspaces/${workspace.id}`);
 }
 
 // ─── Register new organization + org admin ────────────────────────────────────
@@ -152,10 +184,16 @@ export async function registerAction(
     return { error: `Too many attempts. Try again in ${rl.retryAfterSeconds}s.` };
 
   const orgSlug = formData.get("orgSlug") as string;
-  if (!orgSlug) return { error: "No organization specified." };
 
-  const org = await prisma.organization.findUnique({ where: { slug: orgSlug } });
-  if (!org || org.status !== "ACTIVE") return { error: "Organization not found or suspended." };
+  let org;
+  if (isEnterprise) {
+    if (!orgSlug) return { error: "No organization specified." };
+    org = await prisma.organization.findUnique({ where: { slug: orgSlug } });
+    if (!org || org.status !== "ACTIVE") return { error: "Organization not found or suspended." };
+  } else {
+    org = await prisma.organization.findFirst();
+    if (!org) return { error: "System not set up yet." };
+  }
 
   const raw = {
     name: formData.get("name") as string,

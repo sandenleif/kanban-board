@@ -24,7 +24,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     redirect("/login");
   }
 
-  // Super admin has their own panel
+  // Enterprise: super admin has their own panel
   if (session.isSuperAdmin) redirect("/super-admin");
 
   if (!session.organizationId) {
