@@ -19,6 +19,7 @@ async function main() {
     prisma.taskLabelOnTask.deleteMany(),
     prisma.taskChecklistItem.deleteMany(),
     prisma.taskComment.deleteMany(),
+    prisma.taskAssignee.deleteMany(),
     prisma.attachment.deleteMany(),
     prisma.task.deleteMany(),
     prisma.taskLabel.deleteMany(),
@@ -27,8 +28,16 @@ async function main() {
     prisma.project.deleteMany(),
     prisma.workspaceMember.deleteMany(),
     prisma.workspace.deleteMany(),
+    prisma.appSettings.deleteMany(),
     prisma.user.deleteMany(),
+    prisma.organization.deleteMany(),
   ]);
+
+  const org = await prisma.organization.create({
+    data: { name: "Demo Company", slug: "demo-company" },
+  });
+
+  await prisma.appSettings.create({ data: { organizationId: org.id } });
 
   const admin = await prisma.user.create({
     data: {
@@ -37,6 +46,7 @@ async function main() {
       password: await bcrypt.hash("demo1234", 12),
       status: "ACTIVE",
       isAdmin: true,
+      organizationId: org.id,
     },
   });
 
@@ -47,6 +57,7 @@ async function main() {
       password: await bcrypt.hash("demo1234", 12),
       status: "ACTIVE",
       isAdmin: false,
+      organizationId: org.id,
     },
   });
 
@@ -58,6 +69,7 @@ async function main() {
       description: "Our main workspace for product development",
       slug: "demo-company-xyz",
       ownerId: admin.id,
+      organizationId: org.id,
       members: {
         create: [
           { userId: admin.id, role: "OWNER" },

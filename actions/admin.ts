@@ -81,25 +81,54 @@ export async function promoteToAdminAction(userId: string): Promise<ActionResult
 }
 
 export async function resetDatabaseAction(): Promise<ActionResult> {
-  await requireAdmin();
+  const session = await requireAdmin();
+  const user = await prisma.user.findUnique({
+    where: { id: session.userId },
+    select: { organizationId: true },
+  });
+  if (!user?.organizationId) return { error: "No organization found." };
+
+  const orgId = user.organizationId;
+
+  // Delete all data belonging to this organization
+  const workspaces = await prisma.workspace.findMany({
+    where: { organizationId: orgId },
+    select: { id: true },
+  });
+  const workspaceIds = workspaces.map((w) => w.id);
+
+  const projects = await prisma.project.findMany({
+    where: { workspaceId: { in: workspaceIds } },
+    select: { id: true },
+  });
+  const projectIds = projects.map((p) => p.id);
+
+  const tasks = await prisma.task.findMany({
+    where: { projectId: { in: projectIds } },
+    select: { id: true },
+  });
+  const taskIds = tasks.map((t) => t.id);
 
   await prisma.$transaction([
-    prisma.taskActivity.deleteMany(),
-    prisma.taskComment.deleteMany(),
-    prisma.taskChecklistItem.deleteMany(),
-    prisma.taskLabelOnTask.deleteMany(),
-    prisma.attachment.deleteMany(),
-    prisma.task.deleteMany(),
-    prisma.taskLabel.deleteMany(),
-    prisma.boardColumn.deleteMany(),
-    prisma.projectSection.deleteMany(),
-    prisma.project.deleteMany(),
-    prisma.workspaceMember.deleteMany(),
-    prisma.workspace.deleteMany(),
-    prisma.user.deleteMany(),
-    prisma.appSettings.deleteMany(),
+    prisma.taskActivity.deleteMany({ where: { taskId: { in: taskIds } } }),
+    prisma.taskComment.deleteMany({ where: { taskId: { in: taskIds } } }),
+    prisma.taskChecklistItem.deleteMany({ where: { taskId: { in: taskIds } } }),
+    prisma.taskLabelOnTask.deleteMany({ where: { taskId: { in: taskIds } } }),
+    prisma.taskAssignee.deleteMany({ where: { taskId: { in: taskIds } } }),
+    prisma.attachment.deleteMany({ where: { taskId: { in: taskIds } } }),
+    prisma.notification.deleteMany({ where: { userId: { in: [] } } }), // handled via cascade
+    prisma.task.deleteMany({ where: { projectId: { in: projectIds } } }),
+    prisma.taskLabel.deleteMany({ where: { projectId: { in: projectIds } } }),
+    prisma.boardColumn.deleteMany({ where: { section: { projectId: { in: projectIds } } } }),
+    prisma.projectSection.deleteMany({ where: { projectId: { in: projectIds } } }),
+    prisma.project.deleteMany({ where: { workspaceId: { in: workspaceIds } } }),
+    prisma.workspaceMember.deleteMany({ where: { workspaceId: { in: workspaceIds } } }),
+    prisma.workspace.deleteMany({ where: { organizationId: orgId } }),
+    prisma.user.deleteMany({ where: { organizationId: orgId } }),
+    prisma.appSettings.deleteMany({ where: { organizationId: orgId } }),
+    prisma.organization.delete({ where: { id: orgId } }),
   ]);
 
   await clearSession();
-  redirect("/setup");
+  redirect("/register/org");
 }

@@ -23,13 +23,12 @@ async function getClientIp(): Promise<string> {
   );
 }
 
-// ─── First-run setup ──────────────────────────────────────────────────────────
+// ─── First-run setup (creates super admin) ────────────────────────────────────
 
 export async function setupAdminAction(
   _prev: ActionResult,
   formData: FormData
 ): Promise<ActionResult> {
-  // Only callable when zero users exist
   const count = await prisma.user.count();
   if (count > 0) return { error: "Setup already completed." };
 
@@ -48,33 +47,100 @@ export async function setupAdminAction(
       name: parsed.data.name,
       email: parsed.data.email,
       password: hashed,
-      status: "ACTIVE",   // Admin is immediately active
+      status: "ACTIVE",
       isAdmin: true,
+      isSuperAdmin: true,
+      organizationId: null,
+    },
+  });
+
+  await createSession({
+    userId: user.id,
+    email: user.email,
+    name: user.name,
+    organizationId: null,
+    isSuperAdmin: true,
+  });
+  redirect("/super-admin");
+}
+
+// ─── Register new organization + org admin ────────────────────────────────────
+
+export async function registerOrgAction(
+  _prev: ActionResult,
+  formData: FormData
+): Promise<ActionResult> {
+  const ip = await getClientIp();
+  const rl = checkRateLimit(`register-org:${ip}`, 3, 60 * 60 * 1000);
+  if (!rl.allowed)
+    return { error: `Too many attempts. Try again in ${rl.retryAfterSeconds}s.` };
+
+  const superAdminExists = await prisma.user.findFirst({ where: { isSuperAdmin: true } });
+  if (!superAdminExists) return { error: "Platform not set up yet." };
+
+  const raw = {
+    orgName: formData.get("orgName") as string,
+    name: formData.get("name") as string,
+    email: formData.get("email") as string,
+    password: formData.get("password") as string,
+  };
+
+  if (!raw.orgName?.trim()) return { error: "Organization name is required." };
+  if (!raw.name?.trim()) return { error: "Your name is required." };
+
+  const parsed = registerSchema.safeParse({ name: raw.name, email: raw.email, password: raw.password });
+  if (!parsed.success) return { error: parsed.error.errors[0].message };
+
+  const existing = await prisma.user.findUnique({ where: { email: parsed.data.email } });
+  if (existing) return { error: "Could not create account with those details." };
+
+  const slug = generateSlug(raw.orgName.trim());
+  const slugExists = await prisma.organization.findUnique({ where: { slug } });
+  if (slugExists) return { error: "An organization with a similar name already exists." };
+
+  const hashed = await bcrypt.hash(parsed.data.password, 12);
+
+  const org = await prisma.organization.create({
+    data: { name: raw.orgName.trim(), slug },
+  });
+
+  await prisma.appSettings.create({
+    data: { organizationId: org.id, locale: "en" },
+  });
+
+  const user = await prisma.user.create({
+    data: {
+      name: parsed.data.name,
+      email: parsed.data.email,
+      password: hashed,
+      status: "ACTIVE",
+      isAdmin: true,
+      isSuperAdmin: false,
+      organizationId: org.id,
     },
   });
 
   const workspace = await prisma.workspace.create({
     data: {
-      name: `${user.name}'s Workspace`,
-      slug: generateSlug(`${user.name}s workspace`),
+      name: `${org.name}`,
+      slug: generateSlug(`${org.name} workspace`),
       ownerId: user.id,
+      organizationId: org.id,
       members: { create: { userId: user.id, role: "OWNER" } },
     },
   });
 
-  const rawLocale = formData.get("locale") as string | null;
-  const locale = ["en", "de", "fr", "es"].includes(rawLocale ?? "") ? rawLocale! : "en";
-  await prisma.appSettings.upsert({
-    where: { id: "singleton" },
-    create: { id: "singleton", locale },
-    update: { locale },
+  await createSession({
+    userId: user.id,
+    email: user.email,
+    name: user.name,
+    organizationId: org.id,
+    isSuperAdmin: false,
   });
-
-  await createSession({ userId: user.id, email: user.email, name: user.name });
   redirect(`/workspaces/${workspace.id}`);
 }
 
-// ─── Register (creates PENDING user) ─────────────────────────────────────────
+// ─── Register user into existing org ─────────────────────────────────────────
 
 export async function registerAction(
   _prev: ActionResult,
@@ -85,6 +151,12 @@ export async function registerAction(
   if (!rl.allowed)
     return { error: `Too many attempts. Try again in ${rl.retryAfterSeconds}s.` };
 
+  const orgSlug = formData.get("orgSlug") as string;
+  if (!orgSlug) return { error: "No organization specified." };
+
+  const org = await prisma.organization.findUnique({ where: { slug: orgSlug } });
+  if (!org || org.status !== "ACTIVE") return { error: "Organization not found or suspended." };
+
   const raw = {
     name: formData.get("name") as string,
     email: formData.get("email") as string,
@@ -93,10 +165,6 @@ export async function registerAction(
 
   const parsed = registerSchema.safeParse(raw);
   if (!parsed.success) return { error: parsed.error.errors[0].message };
-
-  // Must have at least one admin before users can register
-  const adminExists = await prisma.user.findFirst({ where: { isAdmin: true } });
-  if (!adminExists) return { error: "System not set up yet." };
 
   const existing = await prisma.user.findUnique({ where: { email: parsed.data.email } });
   if (existing) return { error: "Could not create account with those details." };
@@ -107,12 +175,20 @@ export async function registerAction(
       name: parsed.data.name,
       email: parsed.data.email,
       password: hashed,
-      status: "PENDING", // Must be approved by admin
+      status: "PENDING",
       isAdmin: false,
+      isSuperAdmin: false,
+      organizationId: org.id,
     },
   });
 
-  await createSession({ userId: user.id, email: user.email, name: user.name });
+  await createSession({
+    userId: user.id,
+    email: user.email,
+    name: user.name,
+    organizationId: org.id,
+    isSuperAdmin: false,
+  });
   redirect("/pending");
 }
 
@@ -148,12 +224,16 @@ export async function loginAction(
     return { error: "Your account has been suspended. Contact an administrator." };
   }
 
-  await createSession({ userId: user.id, email: user.email, name: user.name });
+  await createSession({
+    userId: user.id,
+    email: user.email,
+    name: user.name,
+    organizationId: user.organizationId,
+    isSuperAdmin: user.isSuperAdmin,
+  });
 
-  if (user.status === "PENDING") {
-    redirect("/pending");
-  }
-
+  if (user.status === "PENDING") redirect("/pending");
+  if (user.isSuperAdmin) redirect("/super-admin");
   redirect("/dashboard");
 }
 

@@ -24,6 +24,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     redirect("/login");
   }
 
+  // Super admin has their own panel
+  if (session.isSuperAdmin) redirect("/super-admin");
+
+  if (!session.organizationId) {
+    await clearSession();
+    redirect("/login");
+  }
+
   const [workspaces, appSettings, notifications] = await Promise.all([
     prisma.workspaceMember.findMany({
       where: { userId: session.userId },
@@ -41,7 +49,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       orderBy: { joinedAt: "asc" },
     }),
     prisma.appSettings.findUnique({
-      where: { id: "singleton" },
+      where: { organizationId: session.organizationId! },
       select: { logoBase64: true, logoMimeType: true },
     }),
     prisma.notification.findMany({

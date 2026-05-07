@@ -11,6 +11,8 @@ export interface SessionPayload {
   userId: string;
   email: string;
   name: string;
+  organizationId: string | null;
+  isSuperAdmin: boolean;
 }
 
 export async function createSession(payload: SessionPayload) {
@@ -41,6 +43,8 @@ export async function getSession(): Promise<SessionPayload | null> {
       userId: payload.userId as string,
       email: payload.email as string,
       name: payload.name as string,
+      organizationId: (payload.organizationId as string | null) ?? null,
+      isSuperAdmin: (payload.isSuperAdmin as boolean) ?? false,
     };
   } catch {
     return null;

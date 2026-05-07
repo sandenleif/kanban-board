@@ -62,6 +62,7 @@ export function Sidebar({ workspaces, session: _, isAdmin, logoSrc }: SidebarPro
                 </svg>
               </div>
               <span className="font-semibold text-sm text-foreground">KanbanFlow</span>
+              <span className="text-[9px] font-bold text-primary border border-primary/30 rounded px-1 leading-4">ENT</span>
             </>
           )}
         </div>

@@ -24,7 +24,13 @@ export async function updateProfileAction(formData: FormData): Promise<ActionRes
     data: { name, email },
   });
 
-  await createSession({ userId: user.id, email: user.email, name: user.name });
+  await createSession({
+    userId: user.id,
+    email: user.email,
+    name: user.name,
+    organizationId: session.organizationId,
+    isSuperAdmin: session.isSuperAdmin,
+  });
   revalidatePath("/settings");
   return { success: true };
 }

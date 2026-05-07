@@ -9,14 +9,15 @@ async function requireAdmin() {
   const session = await requireSession();
   const user = await prisma.user.findUnique({
     where: { id: session.userId },
-    select: { isAdmin: true },
+    select: { isAdmin: true, organizationId: true },
   });
   if (!user?.isAdmin) throw new Error("Admin access required");
-  return session;
+  if (!user.organizationId) throw new Error("No organization");
+  return { session, organizationId: user.organizationId };
 }
 
 export async function uploadLogoAction(formData: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  const { organizationId } = await requireAdmin();
 
   const file = formData.get("logo") as File | null;
   if (!file || file.size === 0) return { error: "No file selected" };
@@ -27,8 +28,8 @@ export async function uploadLogoAction(formData: FormData): Promise<ActionResult
   const base64 = buffer.toString("base64");
 
   await prisma.appSettings.upsert({
-    where: { id: "singleton" },
-    create: { id: "singleton", logoBase64: base64, logoMimeType: file.type },
+    where: { organizationId },
+    create: { organizationId, logoBase64: base64, logoMimeType: file.type },
     update: { logoBase64: base64, logoMimeType: file.type },
   });
 
@@ -37,11 +38,11 @@ export async function uploadLogoAction(formData: FormData): Promise<ActionResult
 }
 
 export async function removeLogoAction(): Promise<ActionResult> {
-  await requireAdmin();
+  const { organizationId } = await requireAdmin();
 
   await prisma.appSettings.upsert({
-    where: { id: "singleton" },
-    create: { id: "singleton", logoBase64: null, logoMimeType: null },
+    where: { organizationId },
+    create: { organizationId, logoBase64: null, logoMimeType: null },
     update: { logoBase64: null, logoMimeType: null },
   });
 
@@ -50,12 +51,12 @@ export async function removeLogoAction(): Promise<ActionResult> {
 }
 
 export async function updateLocaleAction(locale: string): Promise<ActionResult> {
-  await requireAdmin();
+  const { organizationId } = await requireAdmin();
   if (!["en", "de", "fr", "es"].includes(locale)) return { error: "Invalid locale" };
 
   await prisma.appSettings.upsert({
-    where: { id: "singleton" },
-    create: { id: "singleton", locale },
+    where: { organizationId },
+    create: { organizationId, locale },
     update: { locale },
   });
 
@@ -64,9 +65,10 @@ export async function updateLocaleAction(locale: string): Promise<ActionResult> 
 }
 
 export async function getLogoAction() {
-  const settings = await prisma.appSettings.findUnique({
-    where: { id: "singleton" },
+  const session = await requireSession();
+  if (!session.organizationId) return null;
+  return prisma.appSettings.findUnique({
+    where: { organizationId: session.organizationId },
     select: { logoBase64: true, logoMimeType: true },
   });
-  return settings;
 }

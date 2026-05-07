@@ -14,19 +14,20 @@ export default async function AdminUsersPage() {
 
   const currentUser = await prisma.user.findUnique({
     where: { id: session.userId },
-    select: { isAdmin: true },
+    select: { isAdmin: true, organizationId: true },
   });
   if (!currentUser?.isAdmin) notFound();
 
   const [users, appSettings] = await Promise.all([
     prisma.user.findMany({
+      where: { organizationId: currentUser.organizationId },
       orderBy: [{ status: "asc" }, { createdAt: "desc" }],
       select: {
         id: true, name: true, email: true, status: true, isAdmin: true, createdAt: true,
         _count: { select: { workspaceMembers: true } },
       },
     }),
-    prisma.appSettings.findUnique({ where: { id: "singleton" } }),
+    prisma.appSettings.findUnique({ where: { organizationId: currentUser.organizationId! } }),
   ]);
 
   const pending   = users.filter((u) => u.status === "PENDING").length;

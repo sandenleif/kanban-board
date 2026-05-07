@@ -28,12 +28,15 @@ export async function createWorkspaceAction(
 
   const { name, description } = parsed.data;
 
+  if (!session.organizationId) return { error: "No organization associated with your account." };
+
   const workspace = await prisma.workspace.create({
     data: {
       name,
       description: description || null,
       slug: generateSlug(name),
       ownerId: session.userId,
+      organizationId: session.organizationId,
       members: {
         create: { userId: session.userId, role: "OWNER" },
       },
