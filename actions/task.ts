@@ -49,7 +49,7 @@ export async function createTaskAction(
       columnId: parsed.data.columnId,
       projectId: parsed.data.projectId,
       createdById: session.userId,
-      assigneeId: parsed.data.assigneeId || null,
+      assigneeId: parsed.data.assigneeId || session.userId,
       position: (maxPos._max.position ?? -1) + 1,
     },
   });
