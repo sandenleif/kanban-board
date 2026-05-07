@@ -142,7 +142,7 @@ async function main() {
       columnId: basisCols[2].id, // In Progress
       projectId: projectIT.id,
       createdById: admin.id,
-      assigneeId: admin.id,
+      assignees: { create: { userId: admin.id } },
       dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     },
   });
@@ -155,7 +155,7 @@ async function main() {
       columnId: basisCols[1].id, // To Do
       projectId: projectIT.id,
       createdById: user.id,
-      assigneeId: user.id,
+      assignees: { create: { userId: user.id } },
     },
   });
 
@@ -179,7 +179,7 @@ async function main() {
       columnId: basisCols[4].id, // Done
       projectId: projectIT.id,
       createdById: admin.id,
-      assigneeId: admin.id,
+      assignees: { create: { userId: admin.id } },
     },
   });
 
@@ -217,7 +217,7 @@ async function main() {
       columnId: klinischCols[2].id, // In Progress
       projectId: projectIT.id,
       createdById: admin.id,
-      assigneeId: user.id,
+      assignees: { create: { userId: user.id } },
       dueDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
     },
   });
@@ -230,7 +230,7 @@ async function main() {
       columnId: klinischCols[1].id, // To Do
       projectId: projectIT.id,
       createdById: user.id,
-      assigneeId: user.id,
+      assignees: { create: { userId: user.id } },
       dueDate: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000), // overdue
     },
   });
@@ -244,7 +244,7 @@ async function main() {
       columnId: klinischCols[3].id, // Review
       projectId: projectIT.id,
       createdById: admin.id,
-      assigneeId: admin.id,
+      assignees: { create: { userId: admin.id } },
     },
   });
 
@@ -334,7 +334,7 @@ async function main() {
       columnId: webCols[2].id,
       projectId: projectWeb.id,
       createdById: admin.id,
-      assigneeId: user.id,
+      assignees: { create: { userId: user.id } },
       dueDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
     },
   });
@@ -347,7 +347,7 @@ async function main() {
       columnId: webCols[3].id,
       projectId: projectWeb.id,
       createdById: admin.id,
-      assigneeId: admin.id,
+      assignees: { create: { userId: admin.id } },
     },
   });
 
@@ -371,7 +371,7 @@ async function main() {
       columnId: webCols[4].id,
       projectId: projectWeb.id,
       createdById: admin.id,
-      assigneeId: admin.id,
+      assignees: { create: { userId: admin.id } },
     },
   });
 

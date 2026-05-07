@@ -106,12 +106,21 @@ export function TaskCard({ task, isDragging, canEdit, onTaskClick }: TaskCardPro
                 {task._count.checklist}
               </span>
             )}
-            {task.assignee && (
-              <Avatar className="h-5 w-5">
-                <AvatarFallback className="text-[9px] bg-primary/20 text-primary">
-                  {getInitials(task.assignee.name)}
-                </AvatarFallback>
-              </Avatar>
+            {task.assignees.length > 0 && (
+              <div className="flex -space-x-1.5">
+                {task.assignees.slice(0, 3).map(({ user }) => (
+                  <Avatar key={user.id} className="h-5 w-5 ring-1 ring-background">
+                    <AvatarFallback className="text-[9px] bg-primary/20 text-primary">
+                      {getInitials(user.name)}
+                    </AvatarFallback>
+                  </Avatar>
+                ))}
+                {task.assignees.length > 3 && (
+                  <div className="h-5 w-5 rounded-full bg-muted ring-1 ring-background flex items-center justify-center text-[9px] text-muted-foreground font-medium">
+                    +{task.assignees.length - 3}
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </div>

@@ -66,7 +66,7 @@ export function BoardColumn({ column, projectId, canEdit, currentUserId, workspa
           position: column.tasks.length,
           columnId: column.id,
           projectId,
-          assignee: workspaceMembers.find((m) => m.id === currentUserId) ?? null,
+          assignees: (() => { const u = workspaceMembers.find((m) => m.id === currentUserId); return u ? [{ user: u }] : []; })(),
           createdBy: { id: currentUserId, name: "" },
           labels: [],
           _count: { comments: 0, checklist: 0 },

@@ -32,7 +32,7 @@ export default async function BoardPage({
               tasks: {
                 orderBy: { position: "asc" },
                 include: {
-                  assignee: { select: { id: true, name: true, avatarUrl: true } },
+                  assignees: { include: { user: { select: { id: true, name: true, avatarUrl: true } } } },
                   createdBy: { select: { id: true, name: true } },
                   labels: { include: { label: true } },
                   _count: { select: { comments: true, checklist: true } },

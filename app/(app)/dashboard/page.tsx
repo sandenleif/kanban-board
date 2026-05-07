@@ -16,13 +16,13 @@ export default async function DashboardPage() {
   const [myTasks, workspaceMembers, taskStats] = await Promise.all([
     prisma.task.findMany({
       where: {
-        OR: [{ createdById: session.userId }, { assigneeId: session.userId }],
+        OR: [{ createdById: session.userId }, { assignees: { some: { userId: session.userId } } }],
         column: { section: { project: { status: "ACTIVE" } } },
       },
       include: {
         column: { include: { section: { include: { project: { include: { workspace: true } } } } } },
         labels: { include: { label: true } },
-        assignee: true,
+        assignees: { include: { user: { select: { id: true, name: true, avatarUrl: true } } } },
       },
       orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
       take: 20,
@@ -41,7 +41,7 @@ export default async function DashboardPage() {
     prisma.task.groupBy({
       by: ["priority"],
       where: {
-        OR: [{ createdById: session.userId }, { assigneeId: session.userId }],
+        OR: [{ createdById: session.userId }, { assignees: { some: { userId: session.userId } } }],
         column: { section: { project: { status: "ACTIVE" } } },
       },
       _count: { id: true },

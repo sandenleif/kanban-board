@@ -26,7 +26,7 @@ export async function createTaskAction(
     dueDate: formData.get("dueDate") as string || undefined,
     columnId: formData.get("columnId") as string,
     projectId: formData.get("projectId") as string,
-    assigneeId: formData.get("assigneeId") as string || undefined,
+    assigneeIds: [session.userId],
   };
 
   const parsed = createTaskSchema.safeParse(raw);
@@ -49,18 +49,13 @@ export async function createTaskAction(
       columnId: parsed.data.columnId,
       projectId: parsed.data.projectId,
       createdById: session.userId,
-      assigneeId: parsed.data.assigneeId || session.userId,
       position: (maxPos._max.position ?? -1) + 1,
+      assignees: { create: { userId: session.userId } },
     },
   });
 
   await prisma.taskActivity.create({
-    data: {
-      type: "CREATED",
-      taskId: task.id,
-      userId: session.userId,
-      content: `created this task`,
-    },
+    data: { type: "CREATED", taskId: task.id, userId: session.userId, content: `created this task` },
   });
 
   revalidatePath(`/workspaces`, "layout");
@@ -88,7 +83,6 @@ export async function updateTaskAction(
   if (parsed.data.priority !== undefined) updateData.priority = parsed.data.priority;
   if (parsed.data.dueDate !== undefined)
     updateData.dueDate = parsed.data.dueDate ? new Date(parsed.data.dueDate) : null;
-  if (parsed.data.assigneeId !== undefined) updateData.assigneeId = parsed.data.assigneeId;
   if (parsed.data.columnId !== undefined) {
     const col = await prisma.boardColumn.findUnique({
       where: { id: parsed.data.columnId },
@@ -105,13 +99,43 @@ export async function updateTaskAction(
 
   await prisma.task.update({ where: { id: taskId }, data: updateData });
 
+  // Update assignees and notify newly added ones
+  if (parsed.data.assigneeIds !== undefined) {
+    const newIds = parsed.data.assigneeIds;
+    const existing = await prisma.taskAssignee.findMany({ where: { taskId } });
+    const existingIds = existing.map((a) => a.userId);
+    const toAdd = newIds.filter((id) => !existingIds.includes(id));
+    const toRemove = existingIds.filter((id) => !newIds.includes(id));
+
+    if (toRemove.length > 0)
+      await prisma.taskAssignee.deleteMany({ where: { taskId, userId: { in: toRemove } } });
+    if (toAdd.length > 0)
+      await prisma.taskAssignee.createMany({ data: toAdd.map((userId) => ({ taskId, userId })) });
+
+    // Notify newly assigned users (excluding the actor)
+    const workspace = await prisma.project.findUnique({
+      where: { id: task.projectId },
+      select: { workspaceId: true },
+    });
+    const actor = await prisma.user.findUnique({ where: { id: session.userId }, select: { name: true } });
+    const notifyIds = toAdd.filter((id) => id !== session.userId);
+    if (notifyIds.length > 0 && workspace) {
+      await prisma.notification.createMany({
+        data: notifyIds.map((userId) => ({
+          userId,
+          type: "TASK_ASSIGNED",
+          message: `${actor?.name ?? "Someone"} assigned you to "${task.title}"`,
+          taskId,
+          taskTitle: task.title,
+          projectId: task.projectId,
+          workspaceId: workspace.workspaceId,
+        })),
+      });
+    }
+  }
+
   await prisma.taskActivity.create({
-    data: {
-      type: "UPDATED",
-      taskId,
-      userId: session.userId,
-      content: `updated the task`,
-    },
+    data: { type: "UPDATED", taskId, userId: session.userId, content: `updated the task` },
   });
 
   revalidatePath(`/workspaces`, "layout");
@@ -183,15 +207,37 @@ export async function moveTaskAction(data: {
 
     if (movedToNewColumn) {
       await tx.taskActivity.create({
-        data: {
-          type: "MOVED",
-          taskId: parsed.data.taskId,
-          userId: session.userId,
-          content: `moved this task`,
-        },
+        data: { type: "MOVED", taskId: parsed.data.taskId, userId: session.userId, content: `moved this task` },
       });
     }
   });
+
+  // Notify assignees when task lands in a "Done" column
+  if (movedToNewColumn) {
+    const destCol = await prisma.boardColumn.findUnique({ where: { id: parsed.data.columnId } });
+    if (destCol?.name.toLowerCase() === "done") {
+      const actor = await prisma.user.findUnique({ where: { id: session.userId }, select: { name: true } });
+      const workspace = await prisma.project.findUnique({
+        where: { id: data.projectId },
+        select: { workspaceId: true },
+      });
+      const assignees = await prisma.taskAssignee.findMany({ where: { taskId: parsed.data.taskId } });
+      const notifyIds = assignees.map((a) => a.userId).filter((id) => id !== session.userId);
+      if (notifyIds.length > 0 && workspace) {
+        await prisma.notification.createMany({
+          data: notifyIds.map((userId) => ({
+            userId,
+            type: "TASK_COMPLETED",
+            message: `${actor?.name ?? "Someone"} completed "${task.title}"`,
+            taskId: parsed.data.taskId,
+            taskTitle: task.title,
+            projectId: data.projectId,
+            workspaceId: workspace.workspaceId,
+          })),
+        });
+      }
+    }
+  }
 
   revalidatePath(`/workspaces`, "layout");
   return { success: true };

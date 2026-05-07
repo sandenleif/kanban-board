@@ -374,23 +374,54 @@ export function TaskDialog({
             <div>
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">{t("assignee")}</p>
               {canEdit ? (
-                <Select value={task.assignee?.id ?? "unassigned"} onValueChange={(v) => handleUpdate({ assigneeId: v === "unassigned" ? null : v })} disabled={isPending}>
-                  <SelectTrigger className="h-8 text-sm"><SelectValue placeholder={t("unassigned")} /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="unassigned">{t("unassigned")}</SelectItem>
-                    {workspaceMembers.map((m) => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <div className="space-y-1">
+                  {workspaceMembers.map((m) => {
+                    const assigned = task.assignees.some((a) => a.user.id === m.id);
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        disabled={isPending}
+                        onClick={() => {
+                          const newIds = assigned
+                            ? task.assignees.filter((a) => a.user.id !== m.id).map((a) => a.user.id)
+                            : [...task.assignees.map((a) => a.user.id), m.id];
+                          const optimistic = assigned
+                            ? task.assignees.filter((a) => a.user.id !== m.id)
+                            : [...task.assignees, { user: m }];
+                          startTransition(async () => {
+                            const result = await updateTaskAction(task.id, { assigneeIds: newIds });
+                            if (result.error) toast.error(result.error);
+                            else onTaskUpdate({ ...task, assignees: optimistic });
+                          });
+                        }}
+                        className={cn(
+                          "flex items-center gap-2 w-full rounded-md px-2 py-1 text-sm transition-colors",
+                          assigned ? "bg-primary/10 text-foreground" : "hover:bg-muted text-muted-foreground"
+                        )}
+                      >
+                        <Avatar className="h-5 w-5 shrink-0">
+                          <AvatarFallback className="text-[9px] bg-primary/20 text-primary">{getInitials(m.name)}</AvatarFallback>
+                        </Avatar>
+                        <span className="flex-1 text-left truncate">{m.name}</span>
+                        {assigned && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}
+                      </button>
+                    );
+                  })}
+                  {workspaceMembers.length === 0 && (
+                    <span className="text-sm text-muted-foreground">{t("unassigned")}</span>
+                  )}
+                </div>
               ) : (
-                <div className="flex items-center gap-2">
-                  {task.assignee ? (
-                    <>
-                      <Avatar className="h-6 w-6">
-                        <AvatarFallback className="text-[10px] bg-primary/20 text-primary">{getInitials(task.assignee.name)}</AvatarFallback>
+                <div className="space-y-1">
+                  {task.assignees.length > 0 ? task.assignees.map(({ user }) => (
+                    <div key={user.id} className="flex items-center gap-2">
+                      <Avatar className="h-5 w-5">
+                        <AvatarFallback className="text-[9px] bg-primary/20 text-primary">{getInitials(user.name)}</AvatarFallback>
                       </Avatar>
-                      <span className="text-sm">{task.assignee.name}</span>
-                    </>
-                  ) : (
+                      <span className="text-sm">{user.name}</span>
+                    </div>
+                  )) : (
                     <span className="text-sm text-muted-foreground">{t("unassigned")}</span>
                   )}
                 </div>

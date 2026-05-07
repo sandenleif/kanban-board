@@ -24,7 +24,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     redirect("/login");
   }
 
-  const [workspaces, appSettings] = await Promise.all([
+  const [workspaces, appSettings, notifications] = await Promise.all([
     prisma.workspaceMember.findMany({
       where: { userId: session.userId },
       include: {
@@ -43,6 +43,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     prisma.appSettings.findUnique({
       where: { id: "singleton" },
       select: { logoBase64: true, logoMimeType: true },
+    }),
+    prisma.notification.findMany({
+      where: { userId: session.userId },
+      orderBy: { createdAt: "desc" },
+      take: 30,
     }),
   ]);
 
@@ -65,7 +70,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         logoSrc={logoSrc}
       />
       <div className="flex flex-1 flex-col overflow-hidden">
-        <Topbar session={session} avatarSrc={avatarSrc} />
+        <Topbar session={session} avatarSrc={avatarSrc} notifications={notifications} />
         <main className="flex-1 overflow-auto p-6">{children}</main>
         <footer className="shrink-0 border-t border-border px-6 py-2 text-center text-xs text-muted-foreground">
           KanbanFlow &middot; powered by{" "}

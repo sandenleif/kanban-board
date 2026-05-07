@@ -32,7 +32,7 @@ export type TaskType = {
   id: string; title: string; description: string | null;
   priority: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
   dueDate: Date | null; position: number; columnId: string; projectId: string;
-  assignee: { id: string; name: string; avatarUrl: string | null } | null;
+  assignees: { user: { id: string; name: string; avatarUrl: string | null } }[];
   createdBy: { id: string; name: string };
   labels: { label: Label }[];
   _count: { comments: number; checklist: number };
@@ -203,7 +203,7 @@ export function BoardView({ project, workspaceId, canEdit, currentUserId, worksp
       !filterSearch ||
       t.title.toLowerCase().includes(filterSearch.toLowerCase()) ||
       t.description?.toLowerCase().includes(filterSearch.toLowerCase()) ||
-      t.assignee?.name.toLowerCase().includes(filterSearch.toLowerCase())
+      t.assignees.some((a) => a.user.name.toLowerCase().includes(filterSearch.toLowerCase()))
     ),
   }));
 

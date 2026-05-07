@@ -18,13 +18,20 @@ import { LogOut, Settings, User } from "lucide-react";
 import Link from "next/link";
 import type { SessionPayload } from "@/lib/auth";
 import { ThemeToggle } from "./ThemeToggle";
+import { NotificationBell } from "./NotificationBell";
+
+type Notification = {
+  id: string; type: string; message: string; read: boolean; createdAt: Date | string;
+  taskId: string | null; projectId: string | null; workspaceId: string | null;
+};
 
 interface TopbarProps {
   session: SessionPayload;
   avatarSrc?: string | null;
+  notifications?: Notification[];
 }
 
-export function Topbar({ session, avatarSrc }: TopbarProps) {
+export function Topbar({ session, avatarSrc, notifications = [] }: TopbarProps) {
   const t = useTranslations("topbar");
   const [isPending, startTransition] = useTransition();
 
@@ -36,6 +43,7 @@ export function Topbar({ session, avatarSrc }: TopbarProps) {
     <header className="flex h-14 items-center justify-between border-b border-border bg-background px-6">
       <div />
       <div className="flex items-center gap-1">
+        <NotificationBell initialNotifications={notifications} />
         <ThemeToggle />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

@@ -76,11 +76,12 @@ model User {
   workspaceMembers WorkspaceMember[]
   ownedWorkspaces  Workspace[]       @relation("WorkspaceOwner")
   createdProjects  Project[]         @relation("ProjectCreator")
-  assignedTasks    Task[]            @relation("TaskAssignee")
+  assignedTasks    TaskAssignee[]
   createdTasks     Task[]            @relation("TaskCreator")
   comments         TaskComment[]
   activities       TaskActivity[]
   uploads          Attachment[]
+  notifications    Notification[]
 
   @@map("users")
 }
@@ -172,20 +173,32 @@ model Task {
   columnId    String
   projectId   String
   createdById String
-  assigneeId  String?
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
-  column      BoardColumn         @relation(fields: [columnId], references: [id], onDelete: Cascade)
-  createdBy   User                @relation("TaskCreator", fields: [createdById], references: [id])
-  assignee    User?               @relation("TaskAssignee", fields: [assigneeId], references: [id])
-  labels      TaskLabelOnTask[]
-  comments    TaskComment[]
-  checklist   TaskChecklistItem[]
-  activities  TaskActivity[]
-  attachments Attachment[]
+  column        BoardColumn         @relation(fields: [columnId], references: [id], onDelete: Cascade)
+  createdBy     User                @relation("TaskCreator", fields: [createdById], references: [id])
+  assignees     TaskAssignee[]
+  labels        TaskLabelOnTask[]
+  comments      TaskComment[]
+  checklist     TaskChecklistItem[]
+  activities    TaskActivity[]
+  attachments   Attachment[]
+  notifications Notification[]
 
   @@map("tasks")
+}
+
+model TaskAssignee {
+  taskId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, userId])
+  @@map("task_assignees")
 }
 
 model TaskLabel {
@@ -267,4 +280,23 @@ model Attachment {
   uploadedBy User @relation(fields: [uploadedById], references: [id])
 
   @@map("attachments")
+}
+
+model Notification {
+  id          String   @id @default(cuid())
+  userId      String
+  type        String
+  message     String
+  taskId      String?
+  taskTitle   String?
+  projectId   String?
+  workspaceId String?
+  read        Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  task Task? @relation(fields: [taskId], references: [id], onDelete: SetNull)
+
+  @@index([userId, read])
+  @@map("notifications")
 }
