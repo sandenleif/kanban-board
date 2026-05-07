@@ -73,6 +73,43 @@ su-exec postgres psql -h 127.0.0.1 -p 5432 -U postgres -tc \
 
 export DATABASE_URL="postgresql://$PG_USER:$PG_PASS@127.0.0.1:5432/$PG_DB"
 
+# ─── Schema migration helper ─────────────────────────────────────────────────
+PG="su-exec postgres psql -h 127.0.0.1 -p 5432 -U postgres -d $PG_DB"
+
+# If upgrading from pre-enterprise schema: create organizations table and
+# backfill organizationId on existing rows before prisma db push runs.
+ORG_TABLE_EXISTS=$($PG -tAc "SELECT to_regclass('public.organizations')" 2>/dev/null || echo "")
+if [ -z "$ORG_TABLE_EXISTS" ] || [ "$ORG_TABLE_EXISTS" = "" ]; then
+  HAS_APP_SETTINGS=$($PG -tAc "SELECT to_regclass('public.app_settings')" 2>/dev/null || echo "")
+  if [ -n "$HAS_APP_SETTINGS" ] && [ "$HAS_APP_SETTINGS" != "" ]; then
+    echo "🔄 Upgrading schema to enterprise layout (no data loss)..."
+    $PG -c "
+      CREATE TABLE IF NOT EXISTS organizations (
+        id TEXT NOT NULL PRIMARY KEY,
+        name TEXT NOT NULL,
+        slug TEXT NOT NULL UNIQUE,
+        status TEXT NOT NULL DEFAULT 'ACTIVE',
+        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+      INSERT INTO organizations (id, name, slug)
+        VALUES ('default-org', 'Default', 'default')
+        ON CONFLICT DO NOTHING;
+      ALTER TABLE app_settings
+        ADD COLUMN IF NOT EXISTS organization_id TEXT;
+      UPDATE app_settings SET organization_id = 'default-org' WHERE organization_id IS NULL;
+      ALTER TABLE workspaces
+        ADD COLUMN IF NOT EXISTS organization_id TEXT;
+      UPDATE workspaces SET organization_id = 'default-org' WHERE organization_id IS NULL;
+      ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS organization_id TEXT,
+        ADD COLUMN IF NOT EXISTS is_super_admin BOOLEAN NOT NULL DEFAULT FALSE;
+      UPDATE users SET organization_id = 'default-org' WHERE organization_id IS NULL;
+    " 2>/dev/null || true
+    echo "✅ Schema upgrade complete"
+  fi
+fi
+
 # ─── Migrations ───────────────────────────────────────────────────────────────
 PRISMA="node node_modules/prisma/build/index.js"
 echo "📦 Pushing schema to database..."
