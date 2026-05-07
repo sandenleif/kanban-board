@@ -340,8 +340,10 @@
           setFeedback('error', '⚠ Server did not respond in time.');
         } else if (err.message === 'wrong_app') {
           setFeedback('error', '⚠ This is not a KanbanFlow server.');
+        } else if (err.message === 'bad_status') {
+          setFeedback('error', '⚠ Server reachable but outdated — please update the Docker image.');
         } else {
-          setFeedback('error', '⚠ Could not reach the server. Is it running?');
+          setFeedback('error', '⚠ Could not reach the server. Check the URL and make sure it is running.');
         }
         return;
       }
