@@ -35,7 +35,7 @@ interface BoardColumnProps {
   allColumns: ColumnType[];
 }
 
-export function BoardColumn({ column, projectId, canEdit, currentUserId, onTaskClick, onTaskCreated, onColumnsChange }: BoardColumnProps) {
+export function BoardColumn({ column, projectId, canEdit, currentUserId, workspaceMembers, onTaskClick, onTaskCreated, onColumnsChange }: BoardColumnProps) {
   const t = useTranslations("board");
   const [showAddTask, setShowAddTask] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState("");
@@ -66,7 +66,7 @@ export function BoardColumn({ column, projectId, canEdit, currentUserId, onTaskC
           position: column.tasks.length,
           columnId: column.id,
           projectId,
-          assignee: null,
+          assignee: workspaceMembers.find((m) => m.id === currentUserId) ?? null,
           createdBy: { id: currentUserId, name: "" },
           labels: [],
           _count: { comments: 0, checklist: 0 },
