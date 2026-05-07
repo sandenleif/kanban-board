@@ -9,7 +9,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const user = await prisma.user.findUnique({
     where: { id: session.userId },
-    select: { status: true, isAdmin: true },
+    select: { status: true, isAdmin: true, avatarBase64: true, avatarMimeType: true },
   });
 
   if (!user) {
@@ -51,6 +51,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       ? `data:${appSettings.logoMimeType};base64,${appSettings.logoBase64}`
       : null;
 
+  const avatarSrc =
+    user.avatarBase64 && user.avatarMimeType
+      ? `data:${user.avatarMimeType};base64,${user.avatarBase64}`
+      : null;
+
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       <Sidebar
@@ -60,8 +65,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         logoSrc={logoSrc}
       />
       <div className="flex flex-1 flex-col overflow-hidden">
-        <Topbar session={session} />
+        <Topbar session={session} avatarSrc={avatarSrc} />
         <main className="flex-1 overflow-auto p-6">{children}</main>
+        <footer className="shrink-0 border-t border-border px-6 py-2 text-center text-xs text-muted-foreground">
+          KanbanFlow &middot; powered by{" "}
+          <a
+            href="https://sanden-hosting.org"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-foreground transition-colors"
+          >
+            sanden-hosting.org
+          </a>
+        </footer>
       </div>
     </div>
   );

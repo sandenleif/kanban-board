@@ -1,6 +1,7 @@
 "use client";
 
 import { useTransition, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { uploadLogoAction, removeLogoAction } from "@/actions/settings";
@@ -13,6 +14,7 @@ interface LogoUploadProps {
 }
 
 export function LogoUpload({ currentLogo }: LogoUploadProps) {
+  const t = useTranslations("admin");
   const [isPending, startTransition] = useTransition();
   const [preview, setPreview] = useState<string | null>(
     currentLogo?.logoBase64 && currentLogo?.logoMimeType
@@ -23,14 +25,8 @@ export function LogoUpload({ currentLogo }: LogoUploadProps) {
   const router = useRouter();
 
   const handleFile = (file: File) => {
-    if (!file.type.startsWith("image/")) {
-      toast.error("Only image files are allowed");
-      return;
-    }
-    if (file.size > 512 * 1024) {
-      toast.error("Max file size is 512 KB");
-      return;
-    }
+    if (!file.type.startsWith("image/")) { toast.error("Only image files are allowed"); return; }
+    if (file.size > 2 * 1024 * 1024) { toast.error("Max file size is 2 MB"); return; }
 
     const reader = new FileReader();
     reader.onload = (e) => setPreview(e.target?.result as string);
@@ -41,36 +37,25 @@ export function LogoUpload({ currentLogo }: LogoUploadProps) {
 
     startTransition(async () => {
       const result = await uploadLogoAction(formData);
-      if (result.error) {
-        toast.error(result.error);
-        setPreview(null);
-      } else {
-        toast.success("Logo updated");
-        router.refresh();
-      }
+      if (result.error) { toast.error(result.error); setPreview(null); }
+      else { toast.success(t("logoUpdated")); router.refresh(); }
     });
   };
 
   const handleRemove = () => {
-    if (!confirm("Remove the company logo?")) return;
+    if (!confirm(t("logoConfirmRemove"))) return;
     startTransition(async () => {
       const result = await removeLogoAction();
       if (result.error) toast.error(result.error);
-      else {
-        setPreview(null);
-        toast.success("Logo removed");
-        router.refresh();
-      }
+      else { setPreview(null); toast.success(t("logoRemoved")); router.refresh(); }
     });
   };
 
   return (
-    <Card>
+    <Card className="mb-6">
       <CardHeader>
-        <CardTitle>Company Logo</CardTitle>
-        <CardDescription>
-          Shown in the top-left sidebar. PNG, JPG, SVG — max 512 KB.
-        </CardDescription>
+        <CardTitle>{t("logoTitle")}</CardTitle>
+        <CardDescription>{t("logoDesc")}</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="flex items-center gap-6">
@@ -94,25 +79,14 @@ export function LogoUpload({ currentLogo }: LogoUploadProps) {
                 e.target.value = "";
               }}
             />
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => inputRef.current?.click()}
-              disabled={isPending}
-            >
+            <Button variant="outline" size="sm" onClick={() => inputRef.current?.click()} disabled={isPending}>
               {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-              {preview ? "Replace logo" : "Upload logo"}
+              {preview ? t("logoReplace") : t("logoUpload")}
             </Button>
             {preview && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-destructive hover:text-destructive"
-                onClick={handleRemove}
-                disabled={isPending}
-              >
+              <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={handleRemove} disabled={isPending}>
                 <Trash2 className="h-4 w-4" />
-                Remove
+                {t("logoRemove")}
               </Button>
             )}
           </div>

@@ -9,16 +9,39 @@ A production-ready, multi-user Kanban board built with Next.js, PostgreSQL and D
 - **Workspaces & Projects** — Multi-workspace with role-based access (Owner / Admin / Member / Viewer)
 - **Sections / Teams** — Divide projects into sections (e.g. "Basis IT", "Klinische IT")
 - **Kanban Board** — Drag & Drop with @dnd-kit, positions stored in PostgreSQL
-- **Tasks** — Priority, due date, assignee, labels, checklist, comments, activity log
+- **Tasks** — Priority, due date, assignee, labels, checklist, comments, activity log, attachments
 - **Dark / Light mode** — Individual preference stored in cookie
+- **Internationalisation** — UI available in English, German, French and Spanish; language selectable per user
+- **Profile pictures** — Users can upload a personal profile picture
 - **Company logo** — Admin can upload a logo shown in the sidebar header
 - **Security** — Rate limiting, bcrypt, JWT httpOnly cookies, server-side auth on every action
 
 ---
 
-## Option A — Docker (recommended)
+## Option A — Standalone (recommended)
 
-No local PostgreSQL needed. Everything runs in containers.
+Single container, zero configuration. PostgreSQL and JWT secret are managed automatically inside the container.
+
+```bash
+docker run -d -v kanban_data:/data -p 3000:3000 ghcr.io/sandenleif/kanban-board:standalone
+```
+
+Then open **http://localhost:3000 → /setup** to create your admin account.
+
+**Update to a new version:**
+```bash
+docker pull ghcr.io/sandenleif/kanban-board:standalone
+docker stop kanban && docker rm kanban
+docker run -d --name kanban -v kanban_data:/data -p 3000:3000 ghcr.io/sandenleif/kanban-board:standalone
+```
+
+> The `-v kanban_data:/data` flag persists your database and JWT secret across restarts and updates.
+
+---
+
+## Option B — Docker Compose (external PostgreSQL)
+
+Two-container setup. Requires a `.env.docker` file with secrets.
 
 ```bash
 # 1. Copy and fill in secrets
@@ -36,14 +59,13 @@ docker compose --env-file .env.docker up -d
 ```bash
 docker compose --env-file .env.docker pull
 docker compose --env-file .env.docker up -d
-# Database data is preserved automatically (Docker volume)
 ```
 
 > ⚠️ Never run `docker compose down -v` — the `-v` flag deletes all data.
 
 ---
 
-## Option B — Local Development
+## Option C — Local Development
 
 Requires Docker for PostgreSQL (or any running PostgreSQL instance).
 
@@ -51,7 +73,7 @@ Requires Docker for PostgreSQL (or any running PostgreSQL instance).
 # 1. Install dependencies
 npm install
 
-# 2. Start PostgreSQL via Docker + run migrations automatically
+# 2. Start PostgreSQL via Docker + run migrations
 npm run db:start
 npx prisma migrate dev
 
@@ -83,17 +105,19 @@ NEXT_PUBLIC_APP_URL="http://localhost:3000"
 │   │   ├── admin/       user management + logo (admin only)
 │   │   ├── dashboard/
 │   │   ├── workspaces/
-│   │   └── settings/
+│   │   └── settings/    profile picture, language, password
 │   ├── setup/           first-run admin creation
 │   └── pending/         approval waiting page
 ├── actions/             Next.js Server Actions (all auth-checked)
 ├── components/
 │   ├── board/           BoardView, TaskCard, TaskDialog, DnD
 │   ├── admin/           UserManagementTable, LogoUpload
+│   ├── settings/        UserSettingsClient
 │   └── layout/          Sidebar, Topbar, ThemeToggle
 ├── lib/                 auth, prisma, permissions, ratelimit
+├── messages/            i18n translations (en, de, fr, es)
 ├── prisma/              schema + migrations
-└── scripts/             Docker entrypoint
+└── scripts/             Docker entrypoints
 ```
 
 ## Useful Commands

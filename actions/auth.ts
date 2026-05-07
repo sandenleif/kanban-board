@@ -62,6 +62,14 @@ export async function setupAdminAction(
     },
   });
 
+  const rawLocale = formData.get("locale") as string | null;
+  const locale = ["en", "de", "fr", "es"].includes(rawLocale ?? "") ? rawLocale! : "en";
+  await prisma.appSettings.upsert({
+    where: { id: "singleton" },
+    create: { id: "singleton", locale },
+    update: { locale },
+  });
+
   await createSession({ userId: user.id, email: user.email, name: user.name });
   redirect(`/workspaces/${workspace.id}`);
 }

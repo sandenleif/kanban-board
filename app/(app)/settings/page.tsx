@@ -1,20 +1,22 @@
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getTranslations } from "next-intl/server";
 import { UserSettingsClient } from "@/components/settings/UserSettingsClient";
 
 export default async function SettingsPage() {
   const session = await requireSession();
+  const t = await getTranslations("settings");
 
   const user = await prisma.user.findUnique({
     where: { id: session.userId },
-    select: { id: true, name: true, email: true, createdAt: true },
+    select: { id: true, name: true, email: true, createdAt: true, avatarBase64: true, avatarMimeType: true },
   });
 
   if (!user) return null;
 
   return (
     <div className="max-w-2xl mx-auto animate-in">
-      <h1 className="text-2xl font-semibold text-foreground mb-6">Settings</h1>
+      <h1 className="text-2xl font-semibold text-foreground mb-6">{t("title")}</h1>
       <UserSettingsClient user={user} />
     </div>
   );

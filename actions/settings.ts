@@ -21,7 +21,7 @@ export async function uploadLogoAction(formData: FormData): Promise<ActionResult
   const file = formData.get("logo") as File | null;
   if (!file || file.size === 0) return { error: "No file selected" };
   if (!file.type.startsWith("image/")) return { error: "File must be an image" };
-  if (file.size > 512 * 1024) return { error: "Max file size is 512 KB" };
+  if (file.size > 2 * 1024 * 1024) return { error: "Max file size is 2 MB" };
 
   const buffer = Buffer.from(await file.arrayBuffer());
   const base64 = buffer.toString("base64");
@@ -43,6 +43,20 @@ export async function removeLogoAction(): Promise<ActionResult> {
     where: { id: "singleton" },
     create: { id: "singleton", logoBase64: null, logoMimeType: null },
     update: { logoBase64: null, logoMimeType: null },
+  });
+
+  revalidatePath("/", "layout");
+  return { success: true };
+}
+
+export async function updateLocaleAction(locale: string): Promise<ActionResult> {
+  await requireAdmin();
+  if (!["en", "de", "fr", "es"].includes(locale)) return { error: "Invalid locale" };
+
+  await prisma.appSettings.upsert({
+    where: { id: "singleton" },
+    create: { id: "singleton", locale },
+    update: { locale },
   });
 
   revalidatePath("/", "layout");

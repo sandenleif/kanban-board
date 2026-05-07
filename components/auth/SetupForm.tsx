@@ -1,13 +1,23 @@
 "use client";
 
 import { useActionState } from "react";
+import { useTranslations } from "next-intl";
 import { setupAdminAction } from "@/actions/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AlertCircle, Loader2, ShieldCheck } from "lucide-react";
 
+const LOCALES = [
+  { code: "en", label: "English", flag: "🇬🇧" },
+  { code: "de", label: "Deutsch", flag: "🇩🇪" },
+  { code: "fr", label: "Français", flag: "🇫🇷" },
+  { code: "es", label: "Español", flag: "🇪🇸" },
+];
+
 export function SetupForm() {
+  const t = useTranslations("setup");
+  const c = useTranslations("common");
   const [state, action, isPending] = useActionState(setupAdminAction, {});
 
   return (
@@ -20,25 +30,42 @@ export function SetupForm() {
       )}
 
       <div className="space-y-1.5">
-        <Label htmlFor="name">Full name</Label>
-        <Input id="name" name="name" placeholder="Admin Name" required />
+        <Label htmlFor="name">{c("fullName")}</Label>
+        <Input id="name" name="name" placeholder={t("namePlaceholder")} required />
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor="email">Email</Label>
-        <Input id="email" name="email" type="email" placeholder="admin@company.com" required />
+        <Label htmlFor="email">{c("email")}</Label>
+        <Input id="email" name="email" type="email" placeholder={t("emailPlaceholder")} required />
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor="password">Password</Label>
+        <Label htmlFor="password">{c("password")}</Label>
         <Input
           id="password"
           name="password"
           type="password"
-          placeholder="Min. 8 characters"
+          placeholder={t("passwordHint")}
           minLength={8}
           required
         />
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="locale">{t("languageLabel")}</Label>
+        <select
+          id="locale"
+          name="locale"
+          defaultValue="en"
+          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
+        >
+          {LOCALES.map((l) => (
+            <option key={l.code} value={l.code}>
+              {l.flag} {l.label}
+            </option>
+          ))}
+        </select>
+        <p className="text-xs text-muted-foreground">{t("languageHint")}</p>
       </div>
 
       <Button type="submit" className="w-full" disabled={isPending}>
@@ -47,7 +74,7 @@ export function SetupForm() {
         ) : (
           <ShieldCheck className="h-4 w-4" />
         )}
-        Create admin account
+        {t("submit")}
       </Button>
     </form>
   );

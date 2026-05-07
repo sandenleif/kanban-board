@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useTranslations } from "next-intl";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { toast } from "sonner";
@@ -10,11 +11,8 @@ import { TaskCard } from "./TaskCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenuTrigger, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { Plus, MoreHorizontal, Pencil, Trash2, X, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -37,15 +35,8 @@ interface BoardColumnProps {
   allColumns: ColumnType[];
 }
 
-export function BoardColumn({
-  column,
-  projectId,
-  canEdit,
-  currentUserId,
-  onTaskClick,
-  onTaskCreated,
-  onColumnsChange,
-}: BoardColumnProps) {
+export function BoardColumn({ column, projectId, canEdit, currentUserId, onTaskClick, onTaskCreated, onColumnsChange }: BoardColumnProps) {
+  const t = useTranslations("board");
   const [showAddTask, setShowAddTask] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [editingName, setEditingName] = useState(false);
@@ -95,35 +86,26 @@ export function BoardColumn({
     }
     startTransition(async () => {
       const result = await updateColumnAction(column.id, projectId, columnName.trim());
-      if (result.error) {
-        toast.error(result.error);
-        setColumnName(column.name);
-      } else {
-        toast.success("Column renamed");
-        onColumnsChange((prev) =>
-          prev.map((c) => (c.id === column.id ? { ...c, name: columnName.trim() } : c))
-        );
+      if (result.error) { toast.error(result.error); setColumnName(column.name); }
+      else {
+        toast.success(t("columnRenamed"));
+        onColumnsChange((prev) => prev.map((c) => (c.id === column.id ? { ...c, name: columnName.trim() } : c)));
       }
       setEditingName(false);
     });
   };
 
   const handleDeleteColumn = () => {
-    if (!confirm(`Delete column "${column.name}"?`)) return;
+    if (!confirm(t("confirmDeleteColumn", { name: column.name }))) return;
     startTransition(async () => {
       const result = await deleteColumnAction(column.id, projectId);
-      if (result.error) {
-        toast.error(result.error);
-      } else {
-        toast.success("Column deleted");
-        onColumnsChange((prev) => prev.filter((c) => c.id !== column.id));
-      }
+      if (result.error) toast.error(result.error);
+      else { toast.success(t("columnDeleted")); onColumnsChange((prev) => prev.filter((c) => c.id !== column.id)); }
     });
   };
 
   return (
     <div className="flex flex-col w-72 shrink-0 h-full">
-      {/* Column header */}
       <div className="flex items-center justify-between mb-3 group">
         {editingName ? (
           <div className="flex items-center gap-1 flex-1">
@@ -133,33 +115,20 @@ export function BoardColumn({
               onChange={(e) => setColumnName(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") handleRenameColumn();
-                if (e.key === "Escape") {
-                  setEditingName(false);
-                  setColumnName(column.name);
-                }
+                if (e.key === "Escape") { setEditingName(false); setColumnName(column.name); }
               }}
               className="h-7 text-sm font-semibold"
             />
             <Button size="icon" className="h-7 w-7 shrink-0" onClick={handleRenameColumn}>
               <Check className="h-3.5 w-3.5" />
             </Button>
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-7 w-7 shrink-0"
-              onClick={() => { setEditingName(false); setColumnName(column.name); }}
-            >
+            <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" onClick={() => { setEditingName(false); setColumnName(column.name); }}>
               <X className="h-3.5 w-3.5" />
             </Button>
           </div>
         ) : (
           <div className="flex items-center gap-2 flex-1 min-w-0">
-            {column.color && (
-              <span
-                className="w-2 h-2 rounded-full shrink-0"
-                style={{ backgroundColor: column.color }}
-              />
-            )}
+            {column.color && <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: column.color }} />}
             <h3 className="text-sm font-semibold text-foreground truncate">{columnName}</h3>
             <span className="text-xs text-muted-foreground font-medium bg-muted rounded-full px-2 py-0.5 shrink-0">
               {column.tasks.length}
@@ -170,33 +139,25 @@ export function BoardColumn({
         {canEdit && !editingName && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-              >
+              <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={() => setEditingName(true)}>
                 <Pencil className="h-4 w-4" />
-                Rename
+                {t("rename")}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem
-                className="text-destructive focus:text-destructive"
-                onClick={handleDeleteColumn}
-              >
+              <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={handleDeleteColumn}>
                 <Trash2 className="h-4 w-4" />
-                Delete column
+                {t("deleteColumn")}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         )}
       </div>
 
-      {/* Drop zone */}
       <div
         ref={setNodeRef}
         className={cn(
@@ -204,10 +165,7 @@ export function BoardColumn({
           isOver ? "bg-primary/5 ring-2 ring-primary/20" : "bg-muted/30"
         )}
       >
-        <SortableContext
-          items={column.tasks.map((t) => t.id)}
-          strategy={verticalListSortingStrategy}
-        >
+        <SortableContext items={column.tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
           {column.tasks.map((task) => (
             <TaskCard key={task.id} task={task} canEdit={canEdit} onTaskClick={onTaskClick} />
           ))}
@@ -215,7 +173,7 @@ export function BoardColumn({
 
         {column.tasks.length === 0 && !isOver && (
           <div className="flex items-center justify-center h-16 text-xs text-muted-foreground/50 border border-dashed border-border/40 rounded-lg">
-            Drop tasks here
+            {t("dropTasksHere")}
           </div>
         )}
 
@@ -225,7 +183,7 @@ export function BoardColumn({
               <div className="rounded-lg bg-card border border-border p-2">
                 <Input
                   autoFocus
-                  placeholder="Task title..."
+                  placeholder={t("taskTitlePlaceholder")}
                   value={newTaskTitle}
                   onChange={(e) => setNewTaskTitle(e.target.value)}
                   onKeyDown={(e) => {
@@ -236,15 +194,10 @@ export function BoardColumn({
                 />
                 <div className="flex gap-1">
                   <Button size="sm" className="h-7 text-xs" onClick={handleAddTask} disabled={isPending}>
-                    Add
+                    {t("add")}
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-7 text-xs"
-                    onClick={() => { setShowAddTask(false); setNewTaskTitle(""); }}
-                  >
-                    Cancel
+                  <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setShowAddTask(false); setNewTaskTitle(""); }}>
+                    {t("cancel")}
                   </Button>
                 </div>
               </div>
@@ -255,7 +208,7 @@ export function BoardColumn({
                 className="flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
               >
                 <Plus className="h-3.5 w-3.5" />
-                Add task
+                {t("addTask")}
               </button>
             )}
           </div>
