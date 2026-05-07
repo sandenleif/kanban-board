@@ -7,8 +7,8 @@ import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { ProjectActionsMenu } from "@/components/workspace/ProjectActionsMenu";
 import { CreateProjectButton } from "@/components/workspace/CreateProjectButton";
-import { FolderKanban, Clock, CheckCircle2, Archive, Users } from "lucide-react";
-import { formatDate, canEdit } from "@/lib/utils";
+import { FolderKanban, Clock, CheckCircle2, Archive, Users, Settings } from "lucide-react";
+import { formatDate, canEdit, canAdmin } from "@/lib/utils";
 
 export default async function WorkspacePage({ params }: { params: Promise<{ workspaceId: string }> }) {
   const { workspaceId } = await params;
@@ -35,6 +35,7 @@ export default async function WorkspacePage({ params }: { params: Promise<{ work
 
   const workspace = member.workspace;
   const userCanEdit = canEdit(member.role);
+  const userCanAdmin = canAdmin(member.role);
 
   return (
     <div className="max-w-5xl mx-auto animate-in">
@@ -45,7 +46,18 @@ export default async function WorkspacePage({ params }: { params: Promise<{ work
             <p className="text-muted-foreground text-sm mt-1">{workspace.description}</p>
           )}
         </div>
-        {userCanEdit && <CreateProjectButton workspaceId={workspaceId} />}
+        <div className="flex items-center gap-2">
+          {userCanAdmin && (
+            <Link
+              href={`/workspaces/${workspaceId}/settings`}
+              className="inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            >
+              <Settings className="h-4 w-4" />
+              {t("settingsTitle")}
+            </Link>
+          )}
+          {userCanEdit && <CreateProjectButton workspaceId={workspaceId} />}
+        </div>
       </div>
 
       {projects.length === 0 ? (
