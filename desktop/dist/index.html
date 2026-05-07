@@ -6,74 +6,224 @@
   <title>KanbanFlow</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: #0f172a;
-      color: #f8fafc;
+      background: #09090b;
+      color: #fafafa;
       height: 100vh;
       display: flex;
       align-items: center;
       justify-content: center;
-      user-select: none;
+      overflow: hidden;
       -webkit-user-select: none;
+      user-select: none;
     }
-    .wrap { width: 100%; max-width: 380px; padding: 2rem; }
+
+    /* Background orbs */
+    .bg { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
+    .orb {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(90px);
+      opacity: 0.12;
+      animation: float 10s ease-in-out infinite;
+      will-change: transform;
+    }
+    .orb-1 { width: 700px; height: 700px; background: #3b82f6; top: -250px; left: -150px; }
+    .orb-2 { width: 600px; height: 600px; background: #6366f1; bottom: -200px; right: -150px; animation-delay: -5s; }
+    @keyframes float {
+      0%, 100% { transform: translateY(0) scale(1); }
+      50% { transform: translateY(-24px) scale(1.04); }
+    }
+
+    /* Layout */
+    .wrap { position: relative; z-index: 1; width: 100%; max-width: 420px; padding: 1.5rem; }
+
+    /* Logo */
     .logo { text-align: center; margin-bottom: 2rem; }
-    .logo svg { display: block; margin: 0 auto 0.875rem; }
-    .logo h1 { font-size: 1.625rem; font-weight: 700; letter-spacing: -0.02em; }
-    .logo p { color: #64748b; font-size: 0.875rem; margin-top: 0.375rem; }
-    .card {
-      background: #1e293b;
-      border: 1px solid #334155;
-      border-radius: 12px;
-      padding: 1.5rem;
+    .logo-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 64px;
+      height: 64px;
+      background: linear-gradient(135deg, #3b82f6, #6366f1);
+      border-radius: 18px;
+      margin-bottom: 1rem;
+      box-shadow: 0 0 48px rgba(59, 130, 246, 0.35), 0 0 0 1px rgba(99, 102, 241, 0.2);
     }
-    label { display: block; font-size: 0.8125rem; font-weight: 500; color: #94a3b8; margin-bottom: 0.5rem; }
+    .logo h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+    }
+    .logo p {
+      color: #71717a;
+      font-size: 0.875rem;
+      margin-top: 0.375rem;
+    }
+
+    /* Card */
+    .card {
+      background: rgba(24, 24, 27, 0.75);
+      border: 1px solid rgba(63, 63, 70, 0.7);
+      border-radius: 18px;
+      padding: 1.875rem;
+      -webkit-backdrop-filter: blur(20px);
+      backdrop-filter: blur(20px);
+      box-shadow: 0 24px 64px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255,255,255,0.04) inset;
+    }
+
+    /* Form */
+    label {
+      display: block;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      color: #a1a1aa;
+      margin-bottom: 0.5rem;
+      letter-spacing: 0.01em;
+    }
     input[type="url"] {
       width: 100%;
-      padding: 0.625rem 0.75rem;
-      background: #0f172a;
-      border: 1px solid #334155;
-      border-radius: 8px;
-      color: #f8fafc;
-      font-size: 0.875rem;
+      padding: 0.75rem 0.9375rem;
+      background: rgba(9, 9, 11, 0.7);
+      border: 1px solid #3f3f46;
+      border-radius: 11px;
+      color: #fafafa;
+      font-size: 0.9375rem;
       outline: none;
-      transition: border-color 0.15s;
-      user-select: text;
+      transition: border-color 0.2s, box-shadow 0.2s;
       -webkit-user-select: text;
+      user-select: text;
     }
-    input[type="url"]:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,.15); }
-    input[type="url"]::placeholder { color: #475569; }
-    .error { color: #f87171; font-size: 0.8rem; margin-top: 0.5rem; min-height: 1.2rem; }
-    button {
+    input[type="url"]:focus {
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.18);
+    }
+    input[type="url"]:disabled { opacity: 0.5; cursor: not-allowed; }
+    input[type="url"]::placeholder { color: #52525b; }
+
+    /* Feedback */
+    .feedback {
+      min-height: 1.5rem;
+      margin-top: 0.5rem;
+      font-size: 0.8125rem;
+      display: flex;
+      align-items: center;
+      gap: 0.375rem;
+      transition: all 0.2s;
+    }
+    .feedback.error { color: #f87171; }
+    .feedback.success { color: #4ade80; }
+    .feedback.info { color: #60a5fa; }
+
+    /* Button */
+    .btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
       width: 100%;
       margin-top: 1rem;
-      padding: 0.625rem;
-      background: #3b82f6;
+      padding: 0.8125rem;
+      background: linear-gradient(135deg, #3b82f6, #4f46e5);
       color: #fff;
       border: none;
-      border-radius: 8px;
-      font-size: 0.875rem;
-      font-weight: 500;
+      border-radius: 11px;
+      font-size: 0.9375rem;
+      font-weight: 600;
       cursor: pointer;
-      transition: background 0.15s, opacity 0.15s;
+      transition: opacity 0.15s, transform 0.1s, box-shadow 0.15s;
+      box-shadow: 0 4px 16px rgba(59, 130, 246, 0.3);
+      letter-spacing: -0.01em;
     }
-    button:hover { background: #2563eb; }
-    button:active { opacity: 0.85; }
-    .hint { text-align: center; margin-top: 1.25rem; font-size: 0.775rem; color: #475569; }
+    .btn:hover:not(:disabled) { opacity: 0.9; box-shadow: 0 6px 24px rgba(59, 130, 246, 0.4); }
+    .btn:active:not(:disabled) { transform: scale(0.98); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
+
+    /* Spinner */
+    .spinner {
+      width: 15px; height: 15px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.65s linear infinite;
+      flex-shrink: 0;
+      will-change: transform;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Footer hint */
+    .hint {
+      text-align: center;
+      margin-top: 1.25rem;
+      font-size: 0.775rem;
+      color: #52525b;
+      line-height: 1.5;
+    }
+    .hint a { color: #71717a; text-decoration: underline; cursor: pointer; }
+    .hint a:hover { color: #a1a1aa; }
+
+    /* Reconnecting state */
+    .reconnecting { text-align: center; }
+    .reconnecting .big-spinner {
+      width: 36px; height: 36px;
+      border: 3px solid rgba(59,130,246,0.25);
+      border-top-color: #3b82f6;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 1.25rem;
+    }
+    .reconnecting h2 { font-size: 1.0625rem; font-weight: 600; margin-bottom: 0.375rem; }
+    .reconnecting .server-url {
+      font-size: 0.8125rem;
+      color: #71717a;
+      word-break: break-all;
+      padding: 0 0.5rem;
+    }
+    .reconnecting .change-link {
+      display: inline-block;
+      margin-top: 1.5rem;
+      font-size: 0.8125rem;
+      color: #52525b;
+      text-decoration: underline;
+      cursor: pointer;
+    }
+    .reconnecting .change-link:hover { color: #a1a1aa; }
+
+    .hidden { display: none !important; }
   </style>
 </head>
 <body>
+  <div class="bg">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+  </div>
+
   <div class="wrap">
     <div class="logo">
-      <svg width="52" height="52" viewBox="0 0 52 52" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect width="52" height="52" rx="13" fill="#3b82f6"/>
-        <path d="M17 13H22V24L31 13H37L27 25.5L37 39H31L22 28V39H17V13Z" fill="white"/>
-      </svg>
+      <div class="logo-icon">
+        <svg width="34" height="34" viewBox="0 0 34 34" fill="none">
+          <path d="M9 7H14V16L21.5 7H27.5L18.5 17.5L27.5 28H21.5L14 19V28H9V7Z" fill="white"/>
+        </svg>
+      </div>
       <h1>KanbanFlow</h1>
-      <p>Enter your server address to connect</p>
+      <p id="subtitle">Connect to your server</p>
     </div>
-    <div class="card">
+
+    <!-- Reconnecting state -->
+    <div class="card hidden" id="reconnecting-card">
+      <div class="reconnecting">
+        <div class="big-spinner"></div>
+        <h2>Connecting…</h2>
+        <p class="server-url" id="reconnecting-url"></p>
+        <a class="change-link" onclick="showForm(true)">Change server</a>
+      </div>
+    </div>
+
+    <!-- Setup form -->
+    <div class="card" id="form-card">
       <label for="url">Server URL</label>
       <input
         type="url"
@@ -82,29 +232,86 @@
         autocomplete="url"
         spellcheck="false"
       />
-      <div class="error" id="error"></div>
-      <button id="btn" onclick="connect()">Connect</button>
+      <div class="feedback" id="feedback"></div>
+      <button type="button" class="btn" id="btn" onclick="connect()">
+        <span id="btn-text">Connect</span>
+      </button>
     </div>
-    <p class="hint">The URL is saved locally — you only need to enter it once.</p>
+
+    <p class="hint" id="hint">The URL is saved locally — you only need to enter it once.</p>
   </div>
 
   <script>
-    const input = document.getElementById('url');
-    const errorEl = document.getElementById('error');
+    const KEY = 'kanbanflow_server';
+    const urlInput  = document.getElementById('url');
+    const feedback  = document.getElementById('feedback');
+    const btn       = document.getElementById('btn');
+    const btnText   = document.getElementById('btn-text');
+    const formCard  = document.getElementById('form-card');
+    const recoCard  = document.getElementById('reconnecting-card');
+    const recoUrl   = document.getElementById('reconnecting-url');
+    const subtitle  = document.getElementById('subtitle');
+    const hint      = document.getElementById('hint');
 
-    const saved = localStorage.getItem('kanbanflow_server');
-    if (saved) {
-      window.location.href = saved;
+    const params      = new URLSearchParams(window.location.search);
+    const forceChange = params.get('change') === '1';
+    const saved       = localStorage.getItem(KEY);
+
+    function showForm(prefill = false) {
+      recoCard.classList.add('hidden');
+      formCard.classList.remove('hidden');
+      subtitle.textContent = prefill ? 'Enter a new server address' : 'Connect to your server';
+      if (prefill && saved) {
+        urlInput.value = saved;
+        hint.innerHTML = '<a onclick="cancelChange()">Cancel — keep current server</a>';
+      } else {
+        hint.textContent = 'The URL is saved locally — you only need to enter it once.';
+      }
+      setTimeout(() => urlInput.focus(), 50);
     }
 
-    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') connect(); });
+    function cancelChange() {
+      if (saved) window.location.href = saved;
+    }
 
-    function connect() {
-      const raw = input.value.trim();
-      errorEl.textContent = '';
+    // Decide initial state
+    if (!forceChange && saved) {
+      formCard.classList.add('hidden');
+      recoCard.classList.remove('hidden');
+      recoUrl.textContent = saved;
+      setTimeout(() => { window.location.href = saved; }, 700);
+    } else {
+      showForm(forceChange);
+    }
+
+    urlInput.addEventListener('keydown', e => { if (e.key === 'Enter') connect(); });
+    urlInput.addEventListener('input', () => {
+      feedback.textContent = '';
+      feedback.className = 'feedback';
+    });
+
+    function setLoading(on) {
+      btn.disabled = on;
+      urlInput.disabled = on;
+      btnText.textContent = on ? 'Verifying…' : 'Connect';
+      const existing = document.getElementById('btn-spinner');
+      if (on && !existing) {
+        const s = document.createElement('div');
+        s.className = 'spinner';
+        s.id = 'btn-spinner';
+        btn.prepend(s);
+      } else if (!on && existing) {
+        existing.remove();
+      }
+    }
+
+    async function connect() {
+      const raw = urlInput.value.trim();
+      feedback.textContent = '';
+      feedback.className = 'feedback';
 
       if (!raw) {
-        errorEl.textContent = 'Please enter a server URL.';
+        setFeedback('error', '⚠ Please enter a server URL.');
         return;
       }
 
@@ -113,12 +320,40 @@
         url = new URL(raw.startsWith('http') ? raw : 'https://' + raw);
         if (!['http:', 'https:'].includes(url.protocol)) throw new Error();
       } catch {
-        errorEl.textContent = 'Invalid URL — use http:// or https://';
+        setFeedback('error', '⚠ Invalid URL — use http:// or https://');
         return;
       }
 
-      localStorage.setItem('kanbanflow_server', url.href);
-      window.location.href = url.href;
+      setLoading(true);
+      setFeedback('info', 'Verifying server…');
+
+      try {
+        const res = await fetch(`${url.origin}/api/identity`, {
+          signal: AbortSignal.timeout(6000),
+        });
+        if (!res.ok) throw new Error('bad_status');
+        const data = await res.json();
+        if (data.app !== 'kanbanflow') throw new Error('wrong_app');
+      } catch (err) {
+        setLoading(false);
+        if (err.name === 'TimeoutError' || err.name === 'AbortError') {
+          setFeedback('error', '⚠ Server did not respond in time.');
+        } else if (err.message === 'wrong_app') {
+          setFeedback('error', '⚠ This is not a KanbanFlow server.');
+        } else {
+          setFeedback('error', '⚠ Could not reach the server. Is it running?');
+        }
+        return;
+      }
+
+      setFeedback('success', '✓ Verified — connecting…');
+      localStorage.setItem(KEY, url.href);
+      setTimeout(() => { window.location.href = url.href; }, 400);
+    }
+
+    function setFeedback(type, msg) {
+      feedback.textContent = msg;
+      feedback.className = 'feedback ' + type;
     }
   </script>
 </body>
