@@ -1,8 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { requireSession } from "@/lib/auth";
+import { requireSession, clearSession } from "@/lib/auth";
 import type { ActionResult } from "./auth";
 
 async function requireAdmin() {
@@ -77,4 +78,28 @@ export async function promoteToAdminAction(userId: string): Promise<ActionResult
 
   revalidatePath("/admin/users");
   return { success: true };
+}
+
+export async function resetDatabaseAction(): Promise<ActionResult> {
+  await requireAdmin();
+
+  await prisma.$transaction([
+    prisma.taskActivity.deleteMany(),
+    prisma.taskComment.deleteMany(),
+    prisma.taskChecklistItem.deleteMany(),
+    prisma.taskLabelOnTask.deleteMany(),
+    prisma.attachment.deleteMany(),
+    prisma.task.deleteMany(),
+    prisma.taskLabel.deleteMany(),
+    prisma.boardColumn.deleteMany(),
+    prisma.projectSection.deleteMany(),
+    prisma.project.deleteMany(),
+    prisma.workspaceMember.deleteMany(),
+    prisma.workspace.deleteMany(),
+    prisma.user.deleteMany(),
+    prisma.appSettings.deleteMany(),
+  ]);
+
+  await clearSession();
+  redirect("/setup");
 }

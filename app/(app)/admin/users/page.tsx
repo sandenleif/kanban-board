@@ -5,6 +5,7 @@ import { getTranslations } from "next-intl/server";
 import { UserManagementTable } from "@/components/admin/UserManagementTable";
 import { LogoUpload } from "@/components/admin/LogoUpload";
 import { LocaleSelector } from "@/components/admin/LocaleSelector";
+import { DangerZone } from "@/components/admin/DangerZone";
 import { Users, Clock, CheckCircle2, Ban } from "lucide-react";
 
 export default async function AdminUsersPage() {
@@ -60,6 +61,7 @@ export default async function AdminUsersPage() {
       <LocaleSelector currentLocale={appSettings?.locale ?? "en"} />
       <LogoUpload currentLogo={appSettings} />
       <UserManagementTable users={users} currentUserId={session.userId} />
+      <DangerZone />
     </div>
   );
 }
