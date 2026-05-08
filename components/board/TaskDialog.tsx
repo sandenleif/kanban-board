@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useEffect } from "react";
+import { useState, useTransition, useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import {
@@ -8,6 +8,7 @@ import {
   addChecklistItemAction, toggleChecklistItemAction, deleteChecklistItemAction,
   addLabelAction, removeLabelAction,
 } from "@/actions/task";
+import { uploadAttachmentAction, deleteAttachmentAction } from "@/actions/attachment";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -17,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import {
   X, Trash2, Flag, CalendarDays, Tag, CheckSquare, MessageSquare,
-  Plus, MoreHorizontal, Loader2, Check,
+  Plus, MoreHorizontal, Loader2, Check, Paperclip, Download, FileText,
 } from "lucide-react";
 import { cn, formatDate, getInitials, PRIORITY_COLORS, PRIORITY_LABELS } from "@/lib/utils";
 import type { TaskType, ColumnType } from "./BoardView";
@@ -26,6 +27,7 @@ type Label = { id: string; name: string; color: string };
 type User_ = { id: string; name: string; avatarUrl: string | null };
 type Comment = { id: string; content: string; authorId: string; author: { name: string }; createdAt: Date | string };
 type ChecklistItem = { id: string; title: string; completed: boolean; position: number };
+type AttachmentItem = { id: string; name: string; size: number; mimeType: string; url: string; createdAt: string };
 
 interface TaskDialogProps {
   task: TaskType; columnId: string; projectId: string; workspaceId: string;
@@ -46,15 +48,23 @@ export function TaskDialog({
   const [editDesc, setEditDesc] = useState(false);
   const [comments, setComments] = useState<Comment[]>([]);
   const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
+  const [attachments, setAttachments] = useState<AttachmentItem[]>([]);
   const [loadingDetails, setLoadingDetails] = useState(true);
   const [newComment, setNewComment] = useState("");
   const [newCheckItem, setNewCheckItem] = useState("");
   const [showAddCheck, setShowAddCheck] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetch(`/api/tasks/${task.id}`)
       .then((r) => r.json())
-      .then((data) => { setComments(data.comments ?? []); setChecklist(data.checklist ?? []); setLoadingDetails(false); })
+      .then((data) => {
+        setComments(data.comments ?? []);
+        setChecklist(data.checklist ?? []);
+        setAttachments(data.attachments ?? []);
+        setLoadingDetails(false);
+      })
       .catch(() => setLoadingDetails(false));
   }, [task.id]);
 
@@ -152,6 +162,30 @@ export function TaskDialog({
         if (result.error) toast.error(result.error);
         else { const label = projectLabels.find((l) => l.id === labelId)!; onTaskUpdate({ ...task, labels: [...task.labels, { label }] }); }
       }
+    });
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingFile(true);
+    const fd = new FormData();
+    fd.set("file", file);
+    const result = await uploadAttachmentAction(task.id, projectId, fd);
+    setUploadingFile(false);
+    if (result.error) { toast.error(result.error); return; }
+    setAttachments((prev) => [...prev, {
+      id: result.id!, name: result.name!, size: result.size!, mimeType: result.mimeType!,
+      url: `/api/attachments/${result.id}`, createdAt: result.createdAt!,
+    }]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleDeleteAttachment = (attId: string) => {
+    startTransition(async () => {
+      const result = await deleteAttachmentAction(attId, projectId);
+      if (result.error) toast.error(result.error);
+      else setAttachments((prev) => prev.filter((a) => a.id !== attId));
     });
   };
 
@@ -288,6 +322,51 @@ export function TaskDialog({
                 )}
               </div>
             )}
+
+            {/* Attachments */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <Paperclip className="h-4 w-4 text-muted-foreground" />
+                  <h3 className="text-sm font-medium text-foreground">
+                    Anhänge
+                    {attachments.length > 0 && <span className="ml-2 text-xs text-muted-foreground">{attachments.length}</span>}
+                  </h3>
+                </div>
+                {canEdit && (
+                  <>
+                    <input ref={fileInputRef} type="file" className="hidden" aria-label="Datei anhängen" onChange={handleFileUpload} />
+                    <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => fileInputRef.current?.click()} disabled={uploadingFile}>
+                      {uploadingFile ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                      {uploadingFile ? "Lädt hoch…" : "Datei anhängen"}
+                    </Button>
+                  </>
+                )}
+              </div>
+              {attachments.length > 0 && (
+                <div className="space-y-1.5">
+                  {attachments.map((att) => (
+                    <div key={att.id} className="flex items-center gap-2 rounded-md border border-border bg-muted/30 px-3 py-2 group/att">
+                      <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate">{att.name}</p>
+                        <p className="text-xs text-muted-foreground">{(att.size / 1024).toFixed(1)} KB</p>
+                      </div>
+                      <a href={att.url} download={att.name} aria-label={`${att.name} herunterladen`} className="shrink-0">
+                        <Button variant="ghost" size="icon" className="h-7 w-7" tabIndex={-1}>
+                          <Download className="h-3.5 w-3.5" />
+                        </Button>
+                      </a>
+                      {canEdit && (
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive opacity-0 group-hover/att:opacity-100" onClick={() => handleDeleteAttachment(att.id)}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
 
             {/* Comments */}
             <div>

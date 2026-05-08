@@ -28,7 +28,7 @@ export async function GET(
   const member = await requireWorkspaceMember(workspaceId, session.userId).catch(() => null);
   if (!member) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const [comments, checklist, activities] = await Promise.all([
+  const [comments, checklist, activities, attachments] = await Promise.all([
     prisma.taskComment.findMany({
       where: { taskId },
       include: { author: { select: { id: true, name: true } } },
@@ -44,7 +44,12 @@ export async function GET(
       orderBy: { createdAt: "desc" },
       take: 20,
     }),
+    prisma.attachment.findMany({
+      where: { taskId },
+      select: { id: true, name: true, size: true, mimeType: true, url: true, createdAt: true, uploadedById: true },
+      orderBy: { createdAt: "asc" },
+    }),
   ]);
 
-  return NextResponse.json({ comments, checklist, activities });
+  return NextResponse.json({ comments, checklist, activities, attachments });
 }

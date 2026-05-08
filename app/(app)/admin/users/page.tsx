@@ -6,6 +6,7 @@ import { UserManagementTable } from "@/components/admin/UserManagementTable";
 import { LogoUpload } from "@/components/admin/LogoUpload";
 import { LocaleSelector } from "@/components/admin/LocaleSelector";
 import { DangerZone } from "@/components/admin/DangerZone";
+import { SmtpSettings } from "@/components/admin/SmtpSettings";
 import { Users, Clock, CheckCircle2, Ban } from "lucide-react";
 
 export default async function AdminUsersPage() {
@@ -61,6 +62,13 @@ export default async function AdminUsersPage() {
 
       <LocaleSelector currentLocale={appSettings?.locale ?? "en"} />
       <LogoUpload currentLogo={appSettings} />
+      <SmtpSettings initial={{
+        smtpHost: appSettings?.smtpHost ?? null,
+        smtpPort: appSettings?.smtpPort ?? null,
+        smtpUser: appSettings?.smtpUser ?? null,
+        smtpFrom: appSettings?.smtpFrom ?? null,
+        smtpSecure: appSettings?.smtpSecure ?? false,
+      }} />
       <UserManagementTable users={users} currentUserId={session.userId} />
       <DangerZone />
     </div>

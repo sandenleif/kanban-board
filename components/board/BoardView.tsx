@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useCallback, useTransition } from "react";
+import { useState, useCallback, useTransition, useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
+import { useRouter } from "next/navigation";
 import {
   DndContext, DragOverlay, KeyboardSensor, PointerSensor,
   pointerWithin, rectIntersection,
@@ -66,9 +67,11 @@ const kanbanCollision: CollisionDetection = (args) => {
 
 export function BoardView({ project, workspaceId, canEdit, currentUserId, workspaceMembers }: BoardViewProps) {
   const t = useTranslations("board");
+  const router = useRouter();
   const [sections, setSections] = useState<SectionType[]>(project.sections);
   const [activeSectionId, setActiveSectionId] = useState<string>(project.sections[0]?.id ?? "");
   const [activeTask, setActiveTask] = useState<TaskType | null>(null);
+  const activeTaskRef = useRef(activeTask);
   const [selectedTask, setSelectedTask] = useState<TaskType | null>(null);
   const [isPending, startTransition] = useTransition();
   const [showAddColumn, setShowAddColumn] = useState(false);
@@ -78,6 +81,25 @@ export function BoardView({ project, workspaceId, canEdit, currentUserId, worksp
   const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
   const [editingSectionName, setEditingSectionName] = useState("");
   const [filterSearch, setFilterSearch] = useState("");
+
+  // Keep ref in sync so interval closure sees latest value
+  useEffect(() => { activeTaskRef.current = activeTask; }, [activeTask]);
+
+  // Sync incoming prop changes to local state (server refreshes)
+  useEffect(() => {
+    if (!activeTaskRef.current) setSections(project.sections);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project]);
+
+  // Live-update: refresh server data every 30s when tab is visible and not dragging
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (!activeTaskRef.current && document.visibilityState === "visible") {
+        router.refresh();
+      }
+    }, 30_000);
+    return () => clearInterval(id);
+  }, [router]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),

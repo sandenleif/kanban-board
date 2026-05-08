@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { useTranslations } from "next-intl";
+import Link from "next/link";
 import { loginAction } from "@/actions/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,7 +36,12 @@ export function LoginForm() {
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor="password">{c("password")}</Label>
+        <div className="flex items-center justify-between">
+          <Label htmlFor="password">{c("password")}</Label>
+          <Link href="/forgot-password" className="text-xs text-muted-foreground hover:text-primary transition-colors">
+            Passwort vergessen?
+          </Link>
+        </div>
         <Input
           id="password"
           name="password"

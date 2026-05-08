@@ -82,6 +82,12 @@ model AppSettings {
   logoBase64     String?  @db.Text
   logoMimeType   String?
   locale         String   @default("en")
+  smtpHost       String?
+  smtpPort       Int?
+  smtpUser       String?
+  smtpPassword   String?
+  smtpFrom       String?
+  smtpSecure     Boolean  @default(false)
   updatedAt      DateTime @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -104,17 +110,18 @@ model User {
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
 
-  organization     Organization?     @relation(fields: [organizationId], references: [id], onDelete: SetNull)
-  workspaceMembers WorkspaceMember[]
-  ownedWorkspaces  Workspace[]       @relation("WorkspaceOwner")
-  createdProjects  Project[]         @relation("ProjectCreator")
-  assignedTasks    TaskAssignee[]
-  createdTasks     Task[]            @relation("TaskCreator")
-  comments         TaskComment[]
-  activities       TaskActivity[]
-  uploads          Attachment[]
-  notifications    Notification[]
-  personalSpace    PersonalSpace?
+  organization        Organization?        @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  workspaceMembers    WorkspaceMember[]
+  ownedWorkspaces     Workspace[]          @relation("WorkspaceOwner")
+  createdProjects     Project[]            @relation("ProjectCreator")
+  assignedTasks       TaskAssignee[]
+  createdTasks        Task[]               @relation("TaskCreator")
+  comments            TaskComment[]
+  activities          TaskActivity[]
+  uploads             Attachment[]
+  notifications       Notification[]
+  personalSpace       PersonalSpace?
+  passwordResetTokens PasswordResetToken[]
 
   @@map("users")
 }
@@ -307,6 +314,7 @@ model Attachment {
   id           String   @id @default(cuid())
   name         String
   url          String
+  fileData     String?  @db.Text
   size         Int
   mimeType     String
   taskId       String
@@ -336,6 +344,21 @@ model Notification {
 
   @@index([userId, read])
   @@map("notifications")
+}
+
+// ── Password Reset ─────────────────────────────────────────────────────────
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  token     String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("password_reset_tokens")
 }
 
 // ── Workspace Checklist ────────────────────────────────────────────────────

@@ -64,6 +64,26 @@ export async function updateLocaleAction(locale: string): Promise<ActionResult> 
   return { success: true };
 }
 
+export async function updateSmtpSettingsAction(formData: FormData): Promise<ActionResult> {
+  const { organizationId } = await requireAdmin();
+
+  const host = (formData.get("smtpHost") as string)?.trim() || null;
+  const port = formData.get("smtpPort") ? parseInt(formData.get("smtpPort") as string) : null;
+  const user = (formData.get("smtpUser") as string)?.trim() || null;
+  const password = (formData.get("smtpPassword") as string) || null;
+  const from = (formData.get("smtpFrom") as string)?.trim() || null;
+  const secure = formData.get("smtpSecure") === "true";
+
+  await prisma.appSettings.upsert({
+    where: { organizationId },
+    create: { organizationId, smtpHost: host, smtpPort: port, smtpUser: user, smtpPassword: password, smtpFrom: from, smtpSecure: secure },
+    update: { smtpHost: host, smtpPort: port, smtpUser: user, smtpPassword: password, smtpFrom: from, smtpSecure: secure },
+  });
+
+  revalidatePath("/admin/users");
+  return { success: true };
+}
+
 export async function getLogoAction() {
   const session = await requireSession();
   if (!session.organizationId) return null;

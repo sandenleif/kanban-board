@@ -1,6 +1,7 @@
 "use server";
 
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
@@ -9,6 +10,7 @@ import { generateSlug } from "@/lib/utils";
 import { loginSchema, registerSchema } from "@/lib/validations/auth";
 import { checkRateLimit } from "@/lib/ratelimit";
 import { isEnterprise } from "@/lib/enterprise";
+import { sendEmail } from "@/lib/email";
 
 export type ActionResult = {
   error?: string;
@@ -280,4 +282,74 @@ export async function loginAction(
 export async function logoutAction() {
   await clearSession();
   redirect("/login");
+}
+
+// ─── Password reset ───────────────────────────────────────────────────────────
+
+export async function requestPasswordResetAction(
+  _prev: ActionResult,
+  formData: FormData
+): Promise<ActionResult> {
+  const ip = await getClientIp();
+  const rl = checkRateLimit(`pw-reset:${ip}`, 3, 15 * 60 * 1000);
+  if (!rl.allowed) return { error: `Too many attempts. Try again in ${rl.retryAfterSeconds}s.` };
+
+  const email = (formData.get("email") as string)?.toLowerCase().trim();
+  if (!email || !email.includes("@")) return { error: "Invalid email address." };
+
+  // Always succeed to avoid user enumeration
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (user) {
+    const token = crypto.randomBytes(32).toString("hex");
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    // Invalidate old tokens
+    await prisma.passwordResetToken.deleteMany({ where: { userId: user.id } });
+    await prisma.passwordResetToken.create({ data: { userId: user.id, token, expiresAt } });
+
+    const h = await headers();
+    const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
+    const proto = h.get("x-forwarded-proto") ?? "http";
+    const resetUrl = `${proto}://${host}/reset-password?token=${token}`;
+
+    try {
+      await sendEmail(
+        user.email,
+        "Passwort zurücksetzen – KanbanFlow",
+        `<p>Hallo ${user.name},</p>
+         <p>Klicke auf den folgenden Link um dein Passwort zurückzusetzen (gültig 1 Stunde):</p>
+         <p><a href="${resetUrl}">${resetUrl}</a></p>
+         <p>Falls du diese Anfrage nicht gestellt hast, ignoriere diese E-Mail.</p>`
+      );
+    } catch {
+      // Don't reveal email-sending failures to the user
+    }
+  }
+
+  return { success: true };
+}
+
+export async function resetPasswordAction(
+  _prev: ActionResult,
+  formData: FormData
+): Promise<ActionResult> {
+  const token = (formData.get("token") as string)?.trim();
+  const password = formData.get("password") as string;
+
+  if (!token) return { error: "Ungültiger Reset-Link." };
+  if (!password || password.length < 8) return { error: "Passwort muss mindestens 8 Zeichen haben." };
+
+  const record = await prisma.passwordResetToken.findUnique({ where: { token } });
+
+  if (!record || record.usedAt || record.expiresAt < new Date()) {
+    return { error: "Reset-Link ist ungültig oder abgelaufen." };
+  }
+
+  const hashed = await bcrypt.hash(password, 12);
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: record.userId }, data: { password: hashed } }),
+    prisma.passwordResetToken.update({ where: { id: record.id }, data: { usedAt: new Date() } }),
+  ]);
+
+  return { success: true };
 }
