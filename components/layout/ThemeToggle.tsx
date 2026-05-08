@@ -20,7 +20,7 @@ export function ThemeToggle() {
     document.documentElement.classList.toggle("dark", next);
     document.documentElement.classList.toggle("light", !next);
     // Persist in DB + sync cookie via server action
-    startTransition(() => updateThemeAction(next ? "dark" : "light"));
+    startTransition(() => { void updateThemeAction(next ? "dark" : "light"); });
   };
 
   return (
