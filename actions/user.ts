@@ -2,9 +2,26 @@
 
 import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { requireSession, createSession } from "@/lib/auth";
 import type { ActionResult } from "./auth";
+
+export async function updateThemeAction(theme: "dark" | "light"): Promise<ActionResult> {
+  const session = await requireSession();
+
+  await prisma.user.update({ where: { id: session.userId }, data: { theme } });
+
+  const cookieStore = await cookies();
+  cookieStore.set("kb_theme", theme, {
+    path: "/",
+    maxAge: 60 * 60 * 24 * 365,
+    httpOnly: false,
+    sameSite: "lax",
+  });
+
+  return { success: true };
+}
 
 export async function updateProfileAction(formData: FormData): Promise<ActionResult> {
   const session = await requireSession();

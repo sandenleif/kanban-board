@@ -3,7 +3,7 @@
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { redirect } from "next/navigation";
-import { headers } from "next/headers";
+import { headers, cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { createSession, clearSession } from "@/lib/auth";
 import { generateSlug } from "@/lib/utils";
@@ -263,6 +263,15 @@ export async function loginAction(
   if (user.status === "SUSPENDED") {
     return { error: "Your account has been suspended. Contact an administrator." };
   }
+
+  // Sync user's saved theme preference into the browser cookie
+  const cs = await cookies();
+  cs.set("kb_theme", user.theme ?? "dark", {
+    path: "/",
+    maxAge: 60 * 60 * 24 * 365,
+    httpOnly: false,
+    sameSite: "lax",
+  });
 
   await createSession({
     userId: user.id,

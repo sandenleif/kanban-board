@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { Sun, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { updateThemeAction } from "@/actions/user";
 
 export function ThemeToggle() {
   const [isDark, setIsDark] = useState(true);
+  const [, startTransition] = useTransition();
 
   useEffect(() => {
     setIsDark(document.documentElement.classList.contains("dark"));
@@ -14,10 +16,11 @@ export function ThemeToggle() {
   const toggle = () => {
     const next = !isDark;
     setIsDark(next);
+    // Apply immediately to DOM (no flash)
     document.documentElement.classList.toggle("dark", next);
     document.documentElement.classList.toggle("light", !next);
-    // Persist for 1 year
-    document.cookie = `kb_theme=${next ? "dark" : "light"}; path=/; max-age=31536000; SameSite=Lax`;
+    // Persist in DB + sync cookie via server action
+    startTransition(() => updateThemeAction(next ? "dark" : "light"));
   };
 
   return (
