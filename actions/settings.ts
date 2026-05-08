@@ -64,7 +64,7 @@ export async function updateLocaleAction(locale: string): Promise<ActionResult> 
   return { success: true };
 }
 
-export async function updateSmtpSettingsAction(formData: FormData): Promise<ActionResult> {
+export async function updateSmtpSettingsAction(_prev: ActionResult, formData: FormData): Promise<ActionResult> {
   const { organizationId } = await requireAdmin();
 
   const host = (formData.get("smtpHost") as string)?.trim() || null;
