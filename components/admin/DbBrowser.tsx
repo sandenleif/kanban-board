@@ -7,6 +7,7 @@ import { Database, Table2, ChevronLeft, ChevronRight, Search, RefreshCw, X, Copy
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { DbUpdatePanel } from "./DbUpdatePanel";
 
 type TableMeta = { name: string; count: number };
 type ColumnInfo = { column_name: string; data_type: string; is_nullable: string };
@@ -83,7 +84,13 @@ export function DbBrowser({ tables, selectedTable, columns, rows, totalRows, pag
   );
 
   return (
-    <div className="flex h-[calc(100vh-56px-37px)] gap-0 -m-6 overflow-hidden">
+    <div className="flex flex-col h-[calc(100vh-56px-37px)] gap-0 -m-6 overflow-hidden">
+      {/* Update panel — full width across top */}
+      <div className="border-b border-border px-4 py-3 bg-background shrink-0">
+        <DbUpdatePanel />
+      </div>
+
+      <div className="flex flex-1 overflow-hidden">
       {/* Left sidebar */}
       <aside className="w-60 shrink-0 border-r border-border flex flex-col bg-sidebar overflow-hidden">
         <div className="px-3 py-3 border-b border-border shrink-0">
@@ -241,6 +248,7 @@ export function DbBrowser({ tables, selectedTable, columns, rows, totalRows, pag
           </>
         )}
       </div>
+      </div>{/* end inner flex */}
 
       {/* Cell content modal */}
       {activeCell && (
