@@ -9,13 +9,7 @@ import { Label } from "@/components/ui/label";
 import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
 
 export function ResetPasswordForm({ token }: { token: string }) {
-  const [state, formAction, isPending] = useActionState(
-    (_prev: { error?: string; success?: boolean }, fd: FormData) => {
-      fd.set("token", token);
-      return resetPasswordAction(_prev, fd);
-    },
-    {}
-  );
+  const [state, formAction, isPending] = useActionState(resetPasswordAction, {});
 
   if (state.success) {
     return (
@@ -36,6 +30,7 @@ export function ResetPasswordForm({ token }: { token: string }) {
 
   return (
     <form action={formAction} className="space-y-4">
+      <input type="hidden" name="token" value={token} />
       {state.error && (
         <div className="flex items-center gap-2 rounded-md bg-destructive/10 border border-destructive/20 px-3 py-2 text-sm text-destructive">
           <AlertCircle className="h-4 w-4 shrink-0" />
