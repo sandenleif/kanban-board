@@ -14,6 +14,7 @@ import {
   Building2,
   ShieldCheck,
   User,
+  Database,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -198,13 +199,27 @@ export function Sidebar({ workspaces, session: _, isAdmin, logoSrc }: SidebarPro
               href="/admin/users"
               className={cn(
                 "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium transition-colors",
-                pathname.startsWith("/admin")
+                pathname === "/admin/users"
                   ? "bg-primary/10 text-primary"
                   : "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
               )}
             >
               <ShieldCheck className="h-4 w-4 shrink-0" />
               {t("userManagement")}
+            </Link>
+          )}
+          {isAdmin && (
+            <Link
+              href="/admin/db"
+              className={cn(
+                "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium transition-colors",
+                pathname.startsWith("/admin/db")
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
+              )}
+            >
+              <Database className="h-4 w-4 shrink-0" />
+              Datenbank
             </Link>
           )}
           <Link
