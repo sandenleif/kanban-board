@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { DbUpdatePanel } from "./DbUpdatePanel";
+import { AppUpdatePanel } from "./AppUpdatePanel";
 
 type TableMeta = { name: string; count: number };
 type ColumnInfo = { column_name: string; data_type: string; is_nullable: string };
@@ -85,8 +86,9 @@ export function DbBrowser({ tables, selectedTable, columns, rows, totalRows, pag
 
   return (
     <div className="flex flex-col h-[calc(100vh-56px-37px)] gap-0 -m-6 overflow-hidden">
-      {/* Update panel — full width across top */}
-      <div className="border-b border-border px-4 py-3 bg-background shrink-0">
+      {/* Update panels — full width across top */}
+      <div className="border-b border-border px-4 py-3 bg-background shrink-0 space-y-3">
+        <AppUpdatePanel />
         <DbUpdatePanel />
       </div>
 

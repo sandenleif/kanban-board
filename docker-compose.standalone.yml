@@ -1,0 +1,44 @@
+# Standalone-Deployment: alles-in-einem Container + Watchtower für automatische Updates
+#
+# Start:  docker compose -f docker-compose.standalone.yml up -d
+# Update (via UI-Button oder manuell):
+#   docker compose -f docker-compose.standalone.yml pull && \
+#   docker compose -f docker-compose.standalone.yml up -d
+
+services:
+  kanban:
+    image: ghcr.io/sandenleif/kanban-board:standalone
+    container_name: kanban-board-standalone
+    restart: unless-stopped
+    volumes:
+      - kanban_data:/data
+    ports:
+      - "${PORT:-5005}:3000"
+    environment:
+      - WATCHTOWER_TOKEN=${WATCHTOWER_TOKEN:-kanban-update-secret}
+      - WATCHTOWER_URL=http://watchtower:8080
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    depends_on:
+      - watchtower
+
+  watchtower:
+    image: containrrr/watchtower:latest
+    container_name: kanban-watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WATCHTOWER_HTTP_API_TOKEN=${WATCHTOWER_TOKEN:-kanban-update-secret}
+      - WATCHTOWER_HTTP_API_UPDATE=true
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_LABEL_ENABLE=true
+      - WATCHTOWER_NO_STARTUP_MESSAGE=true
+    # --no-pull: Watchtower zieht nur auf HTTP-Anfrage, nicht automatisch
+    command: --http-api-update --no-pull
+    # Nur intern erreichbar, nicht von außen
+    expose:
+      - "8080"
+
+volumes:
+  kanban_data:
