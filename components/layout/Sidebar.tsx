@@ -13,6 +13,7 @@ import {
   Plus,
   Building2,
   ShieldCheck,
+  User,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -52,7 +53,7 @@ export function Sidebar({ workspaces, session: _, isAdmin, logoSrc }: SidebarPro
       <aside className="flex h-full w-60 flex-col border-r border-sidebar-border bg-sidebar">
         <div className="flex items-center gap-2 px-4 py-4 border-b border-sidebar-border min-h-[57px]">
           {logoSrc ? (
-            <img src={logoSrc} alt="Company logo" className="h-8 max-w-[140px] object-contain" />
+            <img src={logoSrc} alt="Company logo" className="h-10 max-w-[160px] object-contain" />
           ) : (
             <>
               <div className="w-7 h-7 rounded-md bg-primary flex items-center justify-center shrink-0">
@@ -98,6 +99,21 @@ export function Sidebar({ workspaces, session: _, isAdmin, logoSrc }: SidebarPro
             </Link>
           </div>
 
+          <div className="px-2 mb-1">
+            <Link
+              href="/personal"
+              className={cn(
+                "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium transition-colors",
+                pathname === "/personal"
+                  ? "bg-sidebar-accent text-foreground"
+                  : "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
+              )}
+            >
+              <User className="h-4 w-4 shrink-0" />
+              {t("personalSpace")}
+            </Link>
+          </div>
+
           <div className="mt-4 px-4 mb-1 flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/60">
               {t("workspaces")}
@@ -121,6 +137,7 @@ export function Sidebar({ workspaces, session: _, isAdmin, logoSrc }: SidebarPro
               workspaces.map((workspace) => (
                 <div key={workspace.id} className="mb-1">
                   <button
+                    type="button"
                     onClick={() => toggleWorkspace(workspace.id)}
                     className={cn(
                       "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors",

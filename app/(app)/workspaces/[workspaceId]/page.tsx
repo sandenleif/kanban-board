@@ -7,6 +7,9 @@ import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { ProjectActionsMenu } from "@/components/workspace/ProjectActionsMenu";
 import { CreateProjectButton } from "@/components/workspace/CreateProjectButton";
+import { WorkspaceChecklist } from "@/components/workspace/WorkspaceChecklist";
+import { WorkspaceNote } from "@/components/workspace/WorkspaceNote";
+import { WorkspaceTabs } from "@/components/workspace/WorkspaceTabs";
 import { FolderKanban, Clock, CheckCircle2, Archive, Users, Settings } from "lucide-react";
 import { formatDate, canEdit, canAdmin } from "@/lib/utils";
 
@@ -18,48 +21,60 @@ export default async function WorkspacePage({ params }: { params: Promise<{ work
   const member = await requireWorkspaceMember(workspaceId, session.userId).catch(() => null);
   if (!member) notFound();
 
-  const projects = await prisma.project.findMany({
-    where: { workspaceId },
-    include: {
-      createdBy: { select: { name: true } },
-      _count: { select: { sections: true } },
-      sections: {
-        include: {
-          _count: { select: { columns: true } },
-          columns: { include: { _count: { select: { tasks: true } } } },
+  const [projects, checklistCategories, workspaceNote, allWorkspaceMemberships] = await Promise.all([
+    prisma.project.findMany({
+      where: { workspaceId },
+      include: {
+        createdBy: { select: { name: true } },
+        _count: { select: { sections: true } },
+        sections: {
+          include: {
+            _count: { select: { columns: true } },
+            columns: { include: { _count: { select: { tasks: true } } } },
+          },
         },
       },
-    },
-    orderBy: { createdAt: "desc" },
-  });
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.workspaceChecklistCategory.findMany({
+      where: { workspaceId },
+      orderBy: { position: "asc" },
+      include: {
+        items: {
+          orderBy: { position: "asc" },
+          include: { subItems: { orderBy: { position: "asc" } } },
+        },
+      },
+    }),
+    prisma.workspaceNote.findUnique({ where: { workspaceId }, select: { content: true } }),
+    prisma.workspaceMember.findMany({
+      where: { userId: session.userId },
+      include: {
+        workspace: {
+          include: {
+            projects: {
+              where: { status: "ACTIVE" },
+              select: { id: true, name: true },
+              orderBy: { createdAt: "desc" },
+            },
+          },
+        },
+      },
+    }),
+  ]);
 
   const workspace = member.workspace;
   const userCanEdit = canEdit(member.role);
   const userCanAdmin = canAdmin(member.role);
 
-  return (
-    <div className="max-w-5xl mx-auto animate-in">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground">{workspace.name}</h1>
-          {workspace.description && (
-            <p className="text-muted-foreground text-sm mt-1">{workspace.description}</p>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          {userCanAdmin && (
-            <Link
-              href={`/workspaces/${workspaceId}/settings`}
-              className="inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-            >
-              <Settings className="h-4 w-4" />
-              {t("settingsTitle")}
-            </Link>
-          )}
-          {userCanEdit && <CreateProjectButton workspaceId={workspaceId} />}
-        </div>
-      </div>
+  const allWorkspaces = allWorkspaceMemberships.map((m) => ({
+    id: m.workspace.id,
+    name: m.workspace.name,
+    projects: m.workspace.projects,
+  }));
 
+  const projectsContent = (
+    <div>
       {projects.length === 0 ? (
         <Card>
           <CardContent className="p-16 text-center">
@@ -70,7 +85,7 @@ export default async function WorkspacePage({ params }: { params: Promise<{ work
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {projects.map((project) => {
             const totalTasks = project.sections.flatMap((s) => s.columns).reduce((sum, col) => sum + col._count.tasks, 0);
             const doneTasks = project.sections.flatMap((s) => s.columns).filter((c) => c.name === "Done").reduce((sum, col) => sum + col._count.tasks, 0);
@@ -132,6 +147,55 @@ export default async function WorkspacePage({ params }: { params: Promise<{ work
           })}
         </div>
       )}
+    </div>
+  );
+
+  const checklistContent = (
+    <WorkspaceChecklist
+      workspaceId={workspaceId}
+      categories={checklistCategories}
+      allWorkspaces={allWorkspaces}
+      canEdit={userCanEdit}
+    />
+  );
+
+  const noteContent = (
+    <WorkspaceNote
+      workspaceId={workspaceId}
+      initialContent={workspaceNote?.content ?? null}
+      canEdit={userCanEdit}
+    />
+  );
+
+  return (
+    <div className="flex flex-col h-full animate-in">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-5">
+        <div>
+          <h1 className="text-2xl font-semibold text-foreground">{workspace.name}</h1>
+          {workspace.description && (
+            <p className="text-muted-foreground text-sm mt-1">{workspace.description}</p>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {userCanAdmin && (
+            <Link
+              href={`/workspaces/${workspaceId}/settings`}
+              className="inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            >
+              <Settings className="h-4 w-4" />
+              {t("settingsTitle")}
+            </Link>
+          )}
+          {userCanEdit && <CreateProjectButton workspaceId={workspaceId} />}
+        </div>
+      </div>
+
+      <WorkspaceTabs
+        projectsContent={projectsContent}
+        checklistContent={checklistContent}
+        noteContent={noteContent}
+      />
     </div>
   );
 }

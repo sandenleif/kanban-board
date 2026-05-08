@@ -54,6 +54,13 @@ enum OrgStatus {
   SUSPENDED
 }
 
+enum ChecklistItemPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
 model Organization {
   id        String    @id @default(cuid())
   name      String
@@ -107,6 +114,7 @@ model User {
   activities       TaskActivity[]
   uploads          Attachment[]
   notifications    Notification[]
+  personalSpace    PersonalSpace?
 
   @@map("users")
 }
@@ -121,10 +129,12 @@ model Workspace {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  owner        User              @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  members      WorkspaceMember[]
-  projects     Project[]
+  organization        Organization               @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  owner               User                       @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members             WorkspaceMember[]
+  projects            Project[]
+  checklistCategories WorkspaceChecklistCategory[]
+  note                WorkspaceNote?
 
   @@map("workspaces")
 }
@@ -326,4 +336,121 @@ model Notification {
 
   @@index([userId, read])
   @@map("notifications")
+}
+
+// ── Workspace Checklist ────────────────────────────────────────────────────
+
+model WorkspaceChecklistCategory {
+  id          String                   @id @default(cuid())
+  name        String
+  position    Int                      @default(0)
+  workspaceId String
+  createdAt   DateTime                 @default(now())
+  updatedAt   DateTime                 @updatedAt
+
+  workspace Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  items     WorkspaceChecklistItem[]
+
+  @@map("workspace_checklist_categories")
+}
+
+model WorkspaceChecklistItem {
+  id         String                @id @default(cuid())
+  title      String
+  priority   ChecklistItemPriority @default(MEDIUM)
+  position   Int                   @default(0)
+  categoryId String
+  createdAt  DateTime              @default(now())
+  updatedAt  DateTime              @updatedAt
+
+  category WorkspaceChecklistCategory  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  subItems WorkspaceChecklistSubItem[]
+
+  @@map("workspace_checklist_items")
+}
+
+model WorkspaceChecklistSubItem {
+  id          String   @id @default(cuid())
+  title       String
+  description String?  @db.Text
+  completed   Boolean  @default(false)
+  position    Int      @default(0)
+  itemId      String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  item WorkspaceChecklistItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@map("workspace_checklist_sub_items")
+}
+
+// ── Workspace Note (free text) ─────────────────────────────────────────────
+
+model WorkspaceNote {
+  id          String    @id @default(cuid())
+  workspaceId String    @unique
+  content     String?   @db.Text
+  updatedAt   DateTime  @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@map("workspace_notes")
+}
+
+// ── Personal Space ─────────────────────────────────────────────────────────
+
+model PersonalSpace {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  notes     String?  @db.Text
+  updatedAt DateTime @updatedAt
+
+  user                      User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  personalChecklistCategories PersonalChecklistCategory[]
+
+  @@map("personal_spaces")
+}
+
+model PersonalChecklistCategory {
+  id              String                  @id @default(cuid())
+  name            String
+  position        Int                     @default(0)
+  personalSpaceId String
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+
+  personalSpace PersonalSpace           @relation(fields: [personalSpaceId], references: [id], onDelete: Cascade)
+  items         PersonalChecklistItem[]
+
+  @@map("personal_checklist_categories")
+}
+
+model PersonalChecklistItem {
+  id         String                @id @default(cuid())
+  title      String
+  priority   ChecklistItemPriority @default(MEDIUM)
+  position   Int                   @default(0)
+  categoryId String
+  createdAt  DateTime              @default(now())
+  updatedAt  DateTime              @updatedAt
+
+  category PersonalChecklistCategory  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  subItems PersonalChecklistSubItem[]
+
+  @@map("personal_checklist_items")
+}
+
+model PersonalChecklistSubItem {
+  id          String   @id @default(cuid())
+  title       String
+  description String?  @db.Text
+  completed   Boolean  @default(false)
+  position    Int      @default(0)
+  itemId      String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  item PersonalChecklistItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@map("personal_checklist_sub_items")
 }

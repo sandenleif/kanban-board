@@ -7,9 +7,9 @@ export type Locale = (typeof SUPPORTED_LOCALES)[number];
 export default getRequestConfig(async () => {
   let locale: string = "en";
   try {
-    const settings = await prisma.appSettings.findUnique({
-      where: { id: "singleton" },
+    const settings = await prisma.appSettings.findFirst({
       select: { locale: true },
+      orderBy: { updatedAt: "desc" },
     });
     if (settings?.locale && SUPPORTED_LOCALES.includes(settings.locale as Locale)) {
       locale = settings.locale;

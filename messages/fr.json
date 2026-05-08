@@ -11,7 +11,8 @@
     "settings": "Paramètres",
     "userManagement": "Gestion des utilisateurs",
     "newWorkspace": "Nouvel espace",
-    "noWorkspaces": "Aucun espace de travail"
+    "noWorkspaces": "Aucun espace de travail",
+    "personalSpace": "Espace personnel"
   },
   "topbar": {
     "profile": "Profil",
