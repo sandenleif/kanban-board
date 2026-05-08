@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { RefreshCw, X, CheckCircle2, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -80,6 +80,12 @@ export function DbUpdatePanel() {
   };
 
   const pct = totalSteps > 0 ? Math.round((currentStep / totalSteps) * 100) : 0;
+  const barRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (barRef.current) {
+      barRef.current.style.width = phase === "done" ? "100%" : `${pct}%`;
+    }
+  }, [pct, phase]);
 
   return (
     <div className="border border-border rounded-lg overflow-hidden">
@@ -157,13 +163,13 @@ export function DbUpdatePanel() {
           {/* Bar */}
           <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
             <div
+              ref={barRef}
               className={cn(
-                "h-full rounded-full transition-all duration-500",
+                "h-full rounded-full transition-all duration-500 w-0",
                 phase === "error" ? "bg-destructive"
                   : phase === "done" ? "bg-green-500"
                     : "bg-primary"
               )}
-              style={{ width: `${phase === "done" ? 100 : pct}%` }}
             />
           </div>
 
@@ -180,11 +186,9 @@ export function DbUpdatePanel() {
             )}>
               {phase === "error" ? errorMsg : phase === "done" ? "Datenbank erfolgreich aktualisiert." : stepLabel || "Starte …"}
             </span>
-            {phase !== "idle" && (
-              <span className="ml-auto text-xs text-muted-foreground tabular-nums">
-                {phase === "done" ? "100" : pct}%
-              </span>
-            )}
+            <span className="ml-auto text-xs text-muted-foreground tabular-nums">
+              {phase === "done" ? "100" : pct}%
+            </span>
           </div>
         </div>
       )}
