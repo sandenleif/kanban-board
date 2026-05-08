@@ -23,6 +23,7 @@ export function AppUpdatePanel() {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const barRef = useRef<HTMLDivElement>(null);
   const logEndRef = useRef<HTMLDivElement | null>(null);
+  const phaseRef = useRef<Phase>("idle");
 
   const pct = totalSteps > 0 ? Math.round((currentStep / totalSteps) * 100) : 0;
 
@@ -53,6 +54,7 @@ export function AppUpdatePanel() {
 
   const start = useCallback(() => {
     if (phase === "running" || phase === "restarting") return;
+    phaseRef.current = "running";
     setPhase("running");
     setCurrentStep(0);
     setLogs([]);
@@ -74,6 +76,7 @@ export function AppUpdatePanel() {
         setLogs((p) => [...p, event.text]);
         setTimeout(() => logEndRef.current?.scrollIntoView({ behavior: "smooth" }), 30);
       } else if (event.type === "restart") {
+        phaseRef.current = "restarting";
         setPhase("restarting");
         setLogs((p) => [...p, event.message]);
         es.close();
@@ -87,7 +90,8 @@ export function AppUpdatePanel() {
 
     es.onerror = () => {
       // Connection dropped = container is restarting
-      if (phase === "running") {
+      if (phaseRef.current === "running") {
+        phaseRef.current = "restarting";
         setPhase("restarting");
         setLogs((p) => [...p, "Verbindung unterbrochen – Container startet neu …"]);
         startCountdown(25);
