@@ -11,7 +11,7 @@ services:
     container_name: kanban-board-standalone
     restart: unless-stopped
     volumes:
-      - kanban_data:/data
+      - kanban_standalone_data:/data
     ports:
       - "${PORT:-5005}:3000"
     environment:
@@ -34,6 +34,7 @@ services:
       - WATCHTOWER_CLEANUP=true
       - WATCHTOWER_LABEL_ENABLE=true
       - WATCHTOWER_NO_STARTUP_MESSAGE=true
+      - DOCKER_API_VERSION=1.41
     # --no-pull: Watchtower zieht nur auf HTTP-Anfrage, nicht automatisch
     command: --http-api-update --no-pull
     # Nur intern erreichbar, nicht von außen
@@ -41,4 +42,5 @@ services:
       - "8080"
 
 volumes:
-  kanban_data:
+  kanban_standalone_data:
+    external: true
