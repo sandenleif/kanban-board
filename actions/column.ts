@@ -23,7 +23,7 @@ async function getProjectIdFromSection(sectionId: string): Promise<string | null
 export async function createColumnAction(
   _prev: ActionResult,
   formData: FormData
-): Promise<ActionResult> {
+): Promise<ActionResult & { columnId?: string }> {
   const session = await requireSession();
 
   const raw = {
@@ -45,7 +45,7 @@ export async function createColumnAction(
     _max: { position: true },
   });
 
-  await prisma.boardColumn.create({
+  const column = await prisma.boardColumn.create({
     data: {
       name: parsed.data.name,
       sectionId: parsed.data.sectionId,
@@ -54,7 +54,7 @@ export async function createColumnAction(
   });
 
   revalidatePath("/workspaces");
-  return { success: true };
+  return { success: true, columnId: column.id };
 }
 
 export async function updateColumnAction(

@@ -3,8 +3,10 @@
 import { useState, useCallback, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import {
-  DndContext, DragOverlay, closestCorners, KeyboardSensor, PointerSensor,
+  DndContext, DragOverlay, KeyboardSensor, PointerSensor,
+  pointerWithin, rectIntersection,
   useSensor, useSensors, type DragStartEvent, type DragOverEvent, type DragEndEvent,
+  type CollisionDetection,
 } from "@dnd-kit/core";
 import {
   SortableContext, sortableKeyboardCoordinates, horizontalListSortingStrategy,
@@ -54,6 +56,13 @@ interface BoardViewProps {
   currentUserId: string;
   workspaceMembers: User[];
 }
+
+// Collision detection: pointer position first (most accurate), then rect intersection fallback
+const kanbanCollision: CollisionDetection = (args) => {
+  const pointer = pointerWithin(args);
+  if (pointer.length > 0) return pointer;
+  return rectIntersection(args);
+};
 
 export function BoardView({ project, workspaceId, canEdit, currentUserId, workspaceMembers }: BoardViewProps) {
   const t = useTranslations("board");
@@ -137,13 +146,31 @@ export function BoardView({ project, workspaceId, canEdit, currentUserId, worksp
 
   const handleAddColumn = () => {
     if (!newColumnName.trim() || !activeSection) return;
+    const name = newColumnName.trim();
     const formData = new FormData();
-    formData.set("name", newColumnName.trim());
+    formData.set("name", name);
     formData.set("sectionId", activeSection.id);
     startTransition(async () => {
       const result = await createColumnAction({}, formData);
-      if (result.error) toast.error(result.error);
-      else { toast.success(t("addColumn")); setNewColumnName(""); setShowAddColumn(false); }
+      if (result.error) {
+        toast.error(result.error);
+      } else {
+        const newCol: ColumnType = {
+          id: result.columnId!,
+          name,
+          position: activeSection.columns.length,
+          color: null,
+          sectionId: activeSection.id,
+          tasks: [],
+        };
+        updateSections((prev) =>
+          prev.map((s) =>
+            s.id === activeSection.id ? { ...s, columns: [...s.columns, newCol] } : s
+          )
+        );
+        setNewColumnName("");
+        setShowAddColumn(false);
+      }
     });
   };
 
@@ -339,7 +366,7 @@ export function BoardView({ project, workspaceId, canEdit, currentUserId, worksp
 
       {/* Board */}
       <div className="flex-1 overflow-x-auto overflow-y-hidden">
-        <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd}>
+        <DndContext sensors={sensors} collisionDetection={kanbanCollision} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd}>
           <div className="flex gap-4 h-full p-6 pb-4">
             <SortableContext items={filteredColumns.map((c) => c.id)} strategy={horizontalListSortingStrategy}>
               {filteredColumns.map((column) => (
