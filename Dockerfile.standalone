@@ -48,7 +48,7 @@ COPY --from=builder /app/node_modules/@prisma  ./node_modules/@prisma
 COPY --from=builder /app/node_modules/prisma   ./node_modules/prisma
 
 COPY scripts/entrypoint-standalone.sh ./entrypoint.sh
-RUN chmod +x ./entrypoint.sh
+RUN sed -i 's/\r$//' ./entrypoint.sh && chmod +x ./entrypoint.sh
 
 # /data holds the PostgreSQL cluster and the auto-generated JWT secret.
 # Mount a named volume here to persist data across container restarts:
