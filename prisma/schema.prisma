@@ -420,7 +420,7 @@ enum NotePriority {
 model WorkspaceNote {
   id          String       @id @default(cuid())
   workspaceId String
-  title       String
+  title       String       @default("Notiz")
   content     String?      @db.Text
   priority    NotePriority @default(MEDIUM)
   position    Int          @default(0)
@@ -435,7 +435,7 @@ model WorkspaceNote {
 model PersonalNote {
   id              String       @id @default(cuid())
   personalSpaceId String
-  title           String
+  title           String       @default("Notiz")
   content         String?      @db.Text
   priority        NotePriority @default(MEDIUM)
   position        Int          @default(0)
