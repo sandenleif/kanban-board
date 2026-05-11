@@ -15,10 +15,9 @@ export default async function RegisterPage({
 
   if (!org && isEnterprise) redirect("/register/org");
 
-  const organization = await prisma.organization.findUnique({
-    where: { slug: org },
-    select: { name: true, status: true },
-  });
+  const organization = org
+    ? await prisma.organization.findUnique({ where: { slug: org }, select: { name: true, status: true } })
+    : await prisma.organization.findFirst({ select: { name: true, status: true } });
 
   if (!organization || organization.status !== "ACTIVE") {
     return (
