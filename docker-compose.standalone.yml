@@ -1,9 +1,14 @@
 # Standalone-Deployment: alles-in-einem Container + Watchtower für automatische Updates
 #
 # Start:  docker compose -f docker-compose.standalone.yml up -d
-# Update (via UI-Button oder manuell):
-#   docker compose -f docker-compose.standalone.yml pull && \
-#   docker compose -f docker-compose.standalone.yml up -d
+#
+# GHCR-Authentifizierung (nötig wenn das Image privat ist):
+#   Erstelle eine .env.standalone Datei mit:
+#   GHCR_USER=sandenleif
+#   GHCR_TOKEN=<GitHub Personal Access Token mit read:packages>
+#   WATCHTOWER_TOKEN=<eigenes Geheimnis, beliebig wählbar>
+#
+# Danach: docker compose -f docker-compose.standalone.yml --env-file .env.standalone up -d
 
 services:
   kanban:
@@ -28,16 +33,22 @@ services:
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      # Mountet Docker-Credentials vom Host → Watchtower kann private GHCR-Images ziehen
+      - ${DOCKER_CONFIG:-~/.docker}/config.json:/config.json:ro
     environment:
       - WATCHTOWER_HTTP_API_TOKEN=${WATCHTOWER_TOKEN:-kanban-update-secret}
       - WATCHTOWER_HTTP_API_UPDATE=true
       - WATCHTOWER_CLEANUP=true
       - WATCHTOWER_LABEL_ENABLE=true
       - WATCHTOWER_NO_STARTUP_MESSAGE=true
+      - DOCKER_CONFIG=/
       - DOCKER_API_VERSION=1.41
-    # --no-pull: Watchtower zieht nur auf HTTP-Anfrage, nicht automatisch
-    command: --http-api-update --no-pull
-    # Nur intern erreichbar, nicht von außen
+      # Optionale GHCR-Credentials (Alternative zu docker login auf dem Host)
+      - REPO_USER=${GHCR_USER:-}
+      - REPO_PASS=${GHCR_TOKEN:-}
+    # KEIN --no-pull: Watchtower muss das neue Image ziehen können
+    # Kein --schedule: läuft nur auf HTTP-Anfrage (kein automatischer Poll)
+    command: --http-api-update
     expose:
       - "8080"
 
