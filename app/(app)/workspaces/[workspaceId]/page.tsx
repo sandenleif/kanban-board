@@ -9,12 +9,9 @@ import { ProjectActionsMenu } from "@/components/workspace/ProjectActionsMenu";
 import { CreateProjectButton } from "@/components/workspace/CreateProjectButton";
 import { WorkspaceChecklist } from "@/components/workspace/WorkspaceChecklist";
 import { WorkspaceTabs } from "@/components/workspace/WorkspaceTabs";
-import { NotesPanel } from "@/components/notes/NotesPanel";
-import {
-  createWorkspaceNoteAction, updateWorkspaceNoteAction,
-  deleteWorkspaceNoteAction, convertWorkspaceNoteToTaskAction,
-} from "@/actions/notes";
+import { WorkspaceNotesPanel } from "@/components/notes/WorkspaceNotesPanel";
 import { FolderKanban, Clock, CheckCircle2, Archive, Users, Settings } from "lucide-react";
+import { ProgressBar } from "@/components/ui/ProgressBar";
 import { formatDate, canEdit, canAdmin } from "@/lib/utils";
 
 export default async function WorkspacePage({ params }: { params: Promise<{ workspaceId: string }> }) {
@@ -142,10 +139,7 @@ export default async function WorkspacePage({ params }: { params: Promise<{ work
 
                     {totalTasks > 0 && (
                       <div className="mt-3 h-1.5 w-full rounded-full bg-secondary overflow-hidden">
-                        <div
-                          className="h-full rounded-full bg-primary/70 transition-all"
-                          style={{ width: `${Math.round((doneTasks / totalTasks) * 100)}%` }}
-                        />
+                        <ProgressBar pct={Math.round((doneTasks / totalTasks) * 100)} />
                       </div>
                     )}
                   </Link>
@@ -168,14 +162,11 @@ export default async function WorkspacePage({ params }: { params: Promise<{ work
   );
 
   const noteContent = (
-    <NotesPanel
+    <WorkspaceNotesPanel
+      workspaceId={workspaceId}
       notes={workspaceNotes}
       canEdit={userCanEdit}
       allWorkspaces={allWorkspaces}
-      onCreateNote={(title, priority) => createWorkspaceNoteAction(workspaceId, title, priority)}
-      onUpdateNote={(id, data) => updateWorkspaceNoteAction(workspaceId, id, data)}
-      onDeleteNote={(id) => deleteWorkspaceNoteAction(workspaceId, id)}
-      onConvertToTask={(noteId, projectId) => convertWorkspaceNoteToTaskAction(workspaceId, noteId, projectId)}
     />
   );
 

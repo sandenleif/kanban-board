@@ -2,11 +2,7 @@ import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { User } from "lucide-react";
 import { PersonalChecklist } from "@/components/personal/PersonalChecklist";
-import { NotesPanel } from "@/components/notes/NotesPanel";
-import {
-  createPersonalNoteAction, updatePersonalNoteAction,
-  deletePersonalNoteAction, convertPersonalNoteToTaskAction,
-} from "@/actions/notes";
+import { PersonalNotesPanel } from "@/components/notes/PersonalNotesPanel";
 
 export default async function PersonalSpacePage() {
   const session = await requireSession();
@@ -72,14 +68,9 @@ export default async function PersonalSpacePage() {
 
         {/* Right: Notes */}
         <div className="w-80 shrink-0 flex flex-col max-h-[calc(100vh-180px)]">
-          <NotesPanel
+          <PersonalNotesPanel
             notes={space?.personalNotes ?? []}
-            canEdit
             allWorkspaces={allWorkspaces}
-            onCreateNote={(title, priority) => createPersonalNoteAction(title, priority)}
-            onUpdateNote={(id, data) => updatePersonalNoteAction(id, data)}
-            onDeleteNote={(id) => deletePersonalNoteAction(id)}
-            onConvertToTask={(noteId, projectId) => convertPersonalNoteToTaskAction(noteId, projectId)}
           />
         </div>
       </div>
