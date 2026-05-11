@@ -2,6 +2,7 @@ import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { spawn } from "child_process";
 import path from "path";
+import fs from "fs";
 
 export const dynamic = "force-dynamic";
 
@@ -25,57 +26,92 @@ export async function GET() {
   const sse = (payload: UpdateEvent) =>
     enc.encode(`data: ${JSON.stringify(payload)}\n\n`);
 
-  const TOTAL_STEPS = 4;
+  const TOTAL = 4;
 
   const stream = new ReadableStream({
     start(ctrl) {
-      ctrl.enqueue(sse({ type: "step", step: 1, total: TOTAL_STEPS, label: "Verbinde mit Datenbank …" }));
+      ctrl.enqueue(sse({ type: "step", step: 1, total: TOTAL, label: "Starte Prisma …" }));
 
-      const prismaIndex = path.join(process.cwd(), "node_modules", "prisma", "build", "index.js");
+      // Try multiple known prisma locations
+      const cwd = process.cwd();
+      const candidates = [
+        path.join(cwd, "node_modules", "prisma", "build", "index.js"),
+        path.join(cwd, "node_modules", ".bin", "prisma"),
+        "/app/node_modules/prisma/build/index.js",
+      ];
+      const prismaPath = candidates.find((p) => fs.existsSync(p));
 
-      const child = spawn(
-        process.execPath,
-        [prismaIndex, "db", "push", "--skip-generate", "--accept-data-loss"],
-        { env: process.env, cwd: process.cwd() }
-      );
+      if (!prismaPath) {
+        ctrl.enqueue(sse({ type: "error", message: `Prisma nicht gefunden. Gesucht in: ${candidates.join(", ")}` }));
+        ctrl.close();
+        return;
+      }
+
+      ctrl.enqueue(sse({ type: "log", text: `Prisma: ${prismaPath}` }));
+      ctrl.enqueue(sse({ type: "log", text: `CWD: ${cwd}` }));
+      ctrl.enqueue(sse({ type: "log", text: `DATABASE_URL: ${process.env.DATABASE_URL ? "✓ gesetzt" : "✗ fehlt!"}` }));
+
+      const args = prismaPath.endsWith("index.js")
+        ? [prismaPath, "db", "push", "--skip-generate", "--accept-data-loss"]
+        : ["db", "push", "--skip-generate", "--accept-data-loss"];
+
+      const cmd = prismaPath.endsWith("index.js") ? process.execPath : prismaPath;
+
+      const child = spawn(cmd, args, {
+        env: { ...process.env },
+        cwd,
+        stdio: ["ignore", "pipe", "pipe"],
+      });
 
       let stepSent = 1;
       const advance = (step: number, label: string) => {
         if (step > stepSent) {
           stepSent = step;
-          ctrl.enqueue(sse({ type: "step", step, total: TOTAL_STEPS, label }));
+          ctrl.enqueue(sse({ type: "step", step, total: TOTAL, label }));
         }
       };
 
-      const handleOutput = (raw: string) => {
-        const lines = raw.replace(/\r\n/g, "\n").split("\n");
-        for (const line of lines) {
-          const text = line.trim();
-          if (!text) continue;
-          ctrl.enqueue(sse({ type: "log", text }));
-
-          if (/schema loaded/i.test(text)) advance(2, "Schema eingelesen …");
-          if (/datasource/i.test(text))    advance(2, "Schema eingelesen …");
-          if (/migration|alter|creat|drop/i.test(text)) advance(3, "Änderungen werden angewendet …");
-          if (/in sync|done in/i.test(text)) advance(4, "Abgeschlossen");
-        }
+      const handleLine = (text: string) => {
+        if (!text.trim()) return;
+        ctrl.enqueue(sse({ type: "log", text: text.trim() }));
+        if (/schema loaded|prisma schema/i.test(text)) advance(2, "Schema eingelesen …");
+        if (/datasource|database/i.test(text))         advance(2, "Schema eingelesen …");
+        if (/migration|alter|creat|drop|applying/i.test(text)) advance(3, "Änderungen werden angewendet …");
+        if (/in sync|done in|already in sync/i.test(text)) advance(4, "Fertig");
       };
 
-      child.stdout.on("data", (d: Buffer) => handleOutput(d.toString()));
-      child.stderr.on("data", (d: Buffer) => handleOutput(d.toString()));
+      let stdoutBuf = "";
+      let stderrBuf = "";
+
+      child.stdout.on("data", (d: Buffer) => {
+        stdoutBuf += d.toString();
+        const lines = stdoutBuf.split("\n");
+        stdoutBuf = lines.pop() ?? "";
+        lines.forEach(handleLine);
+      });
+
+      child.stderr.on("data", (d: Buffer) => {
+        stderrBuf += d.toString();
+        const lines = stderrBuf.split("\n");
+        stderrBuf = lines.pop() ?? "";
+        lines.forEach(handleLine);
+      });
 
       child.on("close", (code) => {
+        if (stdoutBuf.trim()) handleLine(stdoutBuf);
+        if (stderrBuf.trim()) handleLine(stderrBuf);
+
         if (code === 0) {
-          ctrl.enqueue(sse({ type: "step", step: TOTAL_STEPS, total: TOTAL_STEPS, label: "Fertig" }));
-          ctrl.enqueue(sse({ type: "done", message: "Datenbank erfolgreich aktualisiert." }));
+          ctrl.enqueue(sse({ type: "step", step: TOTAL, total: TOTAL, label: "Fertig" }));
+          ctrl.enqueue(sse({ type: "done", message: "Schema erfolgreich aktualisiert." }));
         } else {
-          ctrl.enqueue(sse({ type: "error", message: `Prozess beendet mit Code ${code}` }));
+          ctrl.enqueue(sse({ type: "error", message: `Prozess beendet mit Exit-Code ${code}` }));
         }
         ctrl.close();
       });
 
       child.on("error", (err) => {
-        ctrl.enqueue(sse({ type: "error", message: err.message }));
+        ctrl.enqueue(sse({ type: "error", message: `Spawn-Fehler: ${err.message}` }));
         ctrl.close();
       });
     },
@@ -84,7 +120,7 @@ export async function GET() {
   return new Response(stream, {
     headers: {
       "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
+      "Cache-Control": "no-cache, no-transform",
       "Connection": "keep-alive",
       "X-Accel-Buffering": "no",
     },

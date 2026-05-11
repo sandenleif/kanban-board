@@ -142,7 +142,7 @@ model Workspace {
   members             WorkspaceMember[]
   projects            Project[]
   checklistCategories WorkspaceChecklistCategory[]
-  note                WorkspaceNote?
+  notes               WorkspaceNote[]
 
   @@map("workspaces")
 }
@@ -408,17 +408,43 @@ model WorkspaceChecklistSubItem {
   @@map("workspace_checklist_sub_items")
 }
 
-// ── Workspace Note (free text) ─────────────────────────────────────────────
+// ── Notes ─────────────────────────────────────────────────────────────────
+
+enum NotePriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
 
 model WorkspaceNote {
-  id          String    @id @default(cuid())
-  workspaceId String    @unique
-  content     String?   @db.Text
-  updatedAt   DateTime  @updatedAt
+  id          String       @id @default(cuid())
+  workspaceId String
+  title       String
+  content     String?      @db.Text
+  priority    NotePriority @default(MEDIUM)
+  position    Int          @default(0)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@map("workspace_notes")
+}
+
+model PersonalNote {
+  id              String       @id @default(cuid())
+  personalSpaceId String
+  title           String
+  content         String?      @db.Text
+  priority        NotePriority @default(MEDIUM)
+  position        Int          @default(0)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  personalSpace PersonalSpace @relation(fields: [personalSpaceId], references: [id], onDelete: Cascade)
+
+  @@map("personal_notes")
 }
 
 // ── Personal Space ─────────────────────────────────────────────────────────
@@ -426,11 +452,11 @@ model WorkspaceNote {
 model PersonalSpace {
   id        String   @id @default(cuid())
   userId    String   @unique
-  notes     String?  @db.Text
   updatedAt DateTime @updatedAt
 
-  user                      User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                        User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
   personalChecklistCategories PersonalChecklistCategory[]
+  personalNotes               PersonalNote[]
 
   @@map("personal_spaces")
 }

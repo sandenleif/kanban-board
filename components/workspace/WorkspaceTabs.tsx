@@ -54,9 +54,8 @@ export function WorkspaceTabs({ projectsContent, checklistContent, noteContent }
       </div>
 
       {/* Right note panel */}
-      <div className="w-72 shrink-0 flex flex-col min-h-[400px]">
-        <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Notizen</h2>
-        <div className="flex-1">{noteContent}</div>
+      <div className="w-72 shrink-0 flex flex-col min-h-[400px] max-h-[calc(100vh-180px)]">
+        {noteContent}
       </div>
     </div>
   );

@@ -8,8 +8,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ProjectActionsMenu } from "@/components/workspace/ProjectActionsMenu";
 import { CreateProjectButton } from "@/components/workspace/CreateProjectButton";
 import { WorkspaceChecklist } from "@/components/workspace/WorkspaceChecklist";
-import { WorkspaceNote } from "@/components/workspace/WorkspaceNote";
 import { WorkspaceTabs } from "@/components/workspace/WorkspaceTabs";
+import { NotesPanel } from "@/components/notes/NotesPanel";
+import {
+  createWorkspaceNoteAction, updateWorkspaceNoteAction,
+  deleteWorkspaceNoteAction, convertWorkspaceNoteToTaskAction,
+} from "@/actions/notes";
 import { FolderKanban, Clock, CheckCircle2, Archive, Users, Settings } from "lucide-react";
 import { formatDate, canEdit, canAdmin } from "@/lib/utils";
 
@@ -21,7 +25,7 @@ export default async function WorkspacePage({ params }: { params: Promise<{ work
   const member = await requireWorkspaceMember(workspaceId, session.userId).catch(() => null);
   if (!member) notFound();
 
-  const [projects, checklistCategories, workspaceNote, allWorkspaceMemberships] = await Promise.all([
+  const [projects, checklistCategories, workspaceNotes, allWorkspaceMemberships] = await Promise.all([
     prisma.project.findMany({
       where: { workspaceId },
       include: {
@@ -46,7 +50,11 @@ export default async function WorkspacePage({ params }: { params: Promise<{ work
         },
       },
     }),
-    prisma.workspaceNote.findUnique({ where: { workspaceId }, select: { content: true } }),
+    prisma.workspaceNote.findMany({
+      where: { workspaceId },
+      orderBy: { position: "asc" },
+      select: { id: true, title: true, content: true, priority: true, position: true },
+    }),
     prisma.workspaceMember.findMany({
       where: { userId: session.userId },
       include: {
@@ -160,10 +168,14 @@ export default async function WorkspacePage({ params }: { params: Promise<{ work
   );
 
   const noteContent = (
-    <WorkspaceNote
-      workspaceId={workspaceId}
-      initialContent={workspaceNote?.content ?? null}
+    <NotesPanel
+      notes={workspaceNotes}
       canEdit={userCanEdit}
+      allWorkspaces={allWorkspaces}
+      onCreateNote={(title, priority) => createWorkspaceNoteAction(workspaceId, title, priority)}
+      onUpdateNote={(id, data) => updateWorkspaceNoteAction(workspaceId, id, data)}
+      onDeleteNote={(id) => deleteWorkspaceNoteAction(workspaceId, id)}
+      onConvertToTask={(noteId, projectId) => convertWorkspaceNoteToTaskAction(workspaceId, noteId, projectId)}
     />
   );
 
