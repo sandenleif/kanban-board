@@ -9,6 +9,7 @@ import { DangerZone } from "@/components/admin/DangerZone";
 import { SmtpSettings } from "@/components/admin/SmtpSettings";
 import { ExchangeConfigPanel } from "@/components/admin/ExchangeConfigPanel";
 import { HelpdeskAdminPanel } from "@/components/admin/HelpdeskAdminPanel";
+import { LdapConfigPanel } from "@/components/admin/LdapConfigPanel";
 import { isFullSetup } from "@/lib/features";
 import { Users, Clock, CheckCircle2, Ban } from "lucide-react";
 
@@ -22,7 +23,7 @@ export default async function AdminUsersPage() {
   });
   if (!currentUser?.isAdmin) notFound();
 
-  const [users, appSettings, exchangeConfig, teams, categories] = await Promise.all([
+  const [users, appSettings, exchangeConfig, teams, categories, ldapConfig] = await Promise.all([
     prisma.user.findMany({
       where: { organizationId: currentUser.organizationId },
       orderBy: [{ status: "asc" }, { createdAt: "desc" }],
@@ -38,6 +39,9 @@ export default async function AdminUsersPage() {
     isFullSetup
       ? prisma.ticketCategory.findMany({ where: { organizationId: currentUser.organizationId! }, orderBy: { position: "asc" } })
       : Promise.resolve([]),
+    isFullSetup
+      ? prisma.ldapConfig.findUnique({ where: { organizationId: currentUser.organizationId! } })
+      : Promise.resolve(null),
   ]);
 
   const pending   = users.filter((u) => u.status === "PENDING").length;
@@ -90,6 +94,13 @@ export default async function AdminUsersPage() {
         smtpSecure: appSettings?.smtpSecure ?? false,
       }} />
       {isFullSetup && <HelpdeskAdminPanel teams={teams} categories={categories} />}
+      {isFullSetup && (
+        <LdapConfigPanel initial={ldapConfig ? {
+          host: ldapConfig.host, port: ldapConfig.port, bindDn: ldapConfig.bindDn,
+          baseDn: ldapConfig.baseDn, userFilter: ldapConfig.userFilter,
+          enabled: ldapConfig.enabled, lastSyncAt: ldapConfig.lastSyncAt,
+        } : null} />
+      )}
       <UserManagementTable users={users} currentUserId={session.userId} />
       <DangerZone />
     </div>

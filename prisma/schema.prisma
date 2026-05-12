@@ -90,8 +90,10 @@ model Organization {
   ticketQueues      TicketQueue[]
   ticketTeams       TicketTeam[]
   ticketCategories  TicketCategory[]
+  ticketContacts    TicketContact[]
   tickets           Ticket[]
-  exchangeConfig ExchangeConfig?
+  exchangeConfig    ExchangeConfig?
+  ldapConfig        LdapConfig?
 
   @@map("organizations")
 }
@@ -430,6 +432,7 @@ model Ticket {
   fromName       String?
   teamId          String?
   categoryId      String?
+  contactId       String?
   topic           String?
   inventoryNumber String?
   requesterType   String  @default("customer")
@@ -444,6 +447,7 @@ model Ticket {
   queue        TicketQueue?    @relation(fields: [queueId], references: [id], onDelete: SetNull)
   team         TicketTeam?     @relation(fields: [teamId], references: [id], onDelete: SetNull)
   category     TicketCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  contact      TicketContact?  @relation(fields: [contactId], references: [id], onDelete: SetNull)
   createdBy    User            @relation("TicketCreator", fields: [createdById], references: [id])
   assignedTo   User?           @relation("TicketAssignee", fields: [assignedToId], references: [id])
   lockedBy     User?           @relation("TicketLocker", fields: [lockedById], references: [id])
@@ -486,6 +490,46 @@ model ExchangeConfig {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@map("exchange_configs")
+}
+
+model LdapConfig {
+  id             String   @id @default(cuid())
+  organizationId String   @unique
+  host           String
+  port           Int      @default(389)
+  bindDn         String
+  bindPassword   String
+  baseDn         String
+  userFilter     String   @default("(objectClass=person)")
+  enabled        Boolean  @default(false)
+  lastSyncAt     DateTime?
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("ldap_configs")
+}
+
+model TicketContact {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  email          String?
+  phone          String?
+  company        String?
+  department     String?
+  externalId     String?
+  source         String   @default("manual")
+  notes          String?  @db.Text
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  tickets      Ticket[]
+
+  @@unique([organizationId, email])
+  @@index([organizationId, source])
+  @@map("ticket_contacts")
 }
 
 // ── Password Reset ─────────────────────────────────────────────────────────
