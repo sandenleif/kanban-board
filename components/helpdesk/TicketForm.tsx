@@ -9,10 +9,12 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { AlertCircle, Loader2 } from "lucide-react";
+import { ContactSearch } from "./ContactSearch";
 
-type Queue = { id: string; name: string };
-type Team  = { id: string; name: string };
-type OrgUser = { id: string; name: string };
+type Queue    = { id: string; name: string };
+type Team     = { id: string; name: string };
+type Category = { id: string; name: string };
+type OrgUser  = { id: string; name: string };
 
 const PRIORITIES = [
   { value: "LOW",    label: "Niedrig" },
@@ -21,11 +23,19 @@ const PRIORITIES = [
   { value: "URGENT", label: "Dringend" },
 ];
 
-export function TicketForm({ queues, teams, orgUsers, currentUserId }: {
+const REQUESTER_TYPES = [
+  { value: "customer",  label: "Kunde" },
+  { value: "employee",  label: "IT-Mitarbeiter" },
+  { value: "team",      label: "Team-intern" },
+];
+
+export function TicketForm({ queues, teams, categories, orgUsers, currentUserId, hasElastic = false }: {
   queues: Queue[];
   teams: Team[];
+  categories: Category[];
   orgUsers: OrgUser[];
   currentUserId: string;
+  hasElastic?: boolean;
 }) {
   const router = useRouter();
   const [state, action, isPending] = useActionState(createTicketAction, {});
@@ -42,6 +52,12 @@ export function TicketForm({ queues, teams, orgUsers, currentUserId }: {
         </div>
       )}
 
+      {/* Requester */}
+      <div className="space-y-1.5">
+        <Label>Anfragesteller</Label>
+        <ContactSearch hasElastic={hasElastic} />
+      </div>
+
       <div className="space-y-1.5">
         <Label htmlFor="title">Titel *</Label>
         <Input id="title" name="title" placeholder="Kurzbeschreibung des Problems" required />
@@ -53,17 +69,35 @@ export function TicketForm({ queues, teams, orgUsers, currentUserId }: {
       </div>
 
       <div className="grid grid-cols-2 gap-4">
+        {/* Requester type */}
+        <div className="space-y-1.5">
+          <Label htmlFor="requesterType">Anfragesteller-Typ</Label>
+          <select id="requesterType" name="requesterType" aria-label="Anfragesteller-Typ" className="w-full h-9 rounded-md border border-border bg-background text-sm px-3">
+            {REQUESTER_TYPES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+          </select>
+        </div>
+
         <div className="space-y-1.5">
           <Label htmlFor="priority">Priorität</Label>
-          <select id="priority" name="priority" className="w-full h-9 rounded-md border border-border bg-background text-sm px-3">
+          <select id="priority" name="priority" aria-label="Priorität" className="w-full h-9 rounded-md border border-border bg-background text-sm px-3">
             {PRIORITIES.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
           </select>
         </div>
 
+        {categories.length > 0 && (
+          <div className="space-y-1.5">
+            <Label htmlFor="categoryId">Kategorie</Label>
+            <select id="categoryId" name="categoryId" aria-label="Kategorie" className="w-full h-9 rounded-md border border-border bg-background text-sm px-3">
+              <option value="">Keine Kategorie</option>
+              {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+        )}
+
         {queues.length > 0 && (
           <div className="space-y-1.5">
             <Label htmlFor="queueId">Queue</Label>
-            <select id="queueId" name="queueId" className="w-full h-9 rounded-md border border-border bg-background text-sm px-3">
+            <select id="queueId" name="queueId" aria-label="Queue" className="w-full h-9 rounded-md border border-border bg-background text-sm px-3">
               <option value="">Keine Queue</option>
               {queues.map((q) => <option key={q.id} value={q.id}>{q.name}</option>)}
             </select>
@@ -73,7 +107,7 @@ export function TicketForm({ queues, teams, orgUsers, currentUserId }: {
         {teams.length > 0 && (
           <div className="space-y-1.5">
             <Label htmlFor="teamId">Team</Label>
-            <select id="teamId" name="teamId" className="w-full h-9 rounded-md border border-border bg-background text-sm px-3">
+            <select id="teamId" name="teamId" aria-label="Team" className="w-full h-9 rounded-md border border-border bg-background text-sm px-3">
               <option value="">Kein Team</option>
               {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
@@ -82,15 +116,10 @@ export function TicketForm({ queues, teams, orgUsers, currentUserId }: {
 
         <div className="space-y-1.5">
           <Label htmlFor="assignedToId">Zuweisen an</Label>
-          <select id="assignedToId" name="assignedToId" defaultValue={currentUserId} className="w-full h-9 rounded-md border border-border bg-background text-sm px-3">
+          <select id="assignedToId" name="assignedToId" aria-label="Zuweisen an" defaultValue={currentUserId} className="w-full h-9 rounded-md border border-border bg-background text-sm px-3">
             <option value="">Niemanden</option>
             {orgUsers.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
           </select>
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="topic">Thema / Kategorie</Label>
-          <Input id="topic" name="topic" placeholder="z.B. Hardware, Software, Netzwerk" />
         </div>
 
         <div className="space-y-1.5">

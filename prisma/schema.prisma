@@ -87,9 +87,10 @@ model Organization {
   users          User[]
   workspaces     Workspace[]
   settings       AppSettings?
-  ticketQueues   TicketQueue[]
-  ticketTeams    TicketTeam[]
-  tickets        Ticket[]
+  ticketQueues      TicketQueue[]
+  ticketTeams       TicketTeam[]
+  ticketCategories  TicketCategory[]
+  tickets           Ticket[]
   exchangeConfig ExchangeConfig?
 
   @@map("organizations")
@@ -399,6 +400,19 @@ model TicketTeam {
   @@map("ticket_teams")
 }
 
+model TicketCategory {
+  id             String   @id @default(cuid())
+  name           String
+  organizationId String
+  position       Int      @default(0)
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  tickets      Ticket[]
+
+  @@map("ticket_categories")
+}
+
 model Ticket {
   id             String         @id @default(cuid())
   number         Int            @default(autoincrement())
@@ -415,8 +429,10 @@ model Ticket {
   fromEmail      String?
   fromName       String?
   teamId          String?
+  categoryId      String?
   topic           String?
   inventoryNumber String?
+  requesterType   String  @default("customer")
   locked          Boolean        @default(false)
   lockedById      String?
   lockedAt        DateTime?
@@ -427,6 +443,7 @@ model Ticket {
   organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   queue        TicketQueue?    @relation(fields: [queueId], references: [id], onDelete: SetNull)
   team         TicketTeam?     @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  category     TicketCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   createdBy    User            @relation("TicketCreator", fields: [createdById], references: [id])
   assignedTo   User?           @relation("TicketAssignee", fields: [assignedToId], references: [id])
   lockedBy     User?           @relation("TicketLocker", fields: [lockedById], references: [id])

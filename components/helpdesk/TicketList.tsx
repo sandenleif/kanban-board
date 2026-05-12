@@ -30,7 +30,7 @@ type OrgUser = { id: string; name: string };
 
 interface Filters {
   status?: string; priority?: string; queue?: string; team?: string;
-  topic?: string; inventoryNumber?: string; q?: string;
+  topic?: string; inventoryNumber?: string; requesterType?: string; q?: string;
 }
 
 interface Props {
@@ -64,7 +64,7 @@ export function TicketList({ tickets, queues, teams, currentFilters, totalCount,
 
   const hasActiveFilter = !!(
     currentFilters.status || currentFilters.queue || currentFilters.team ||
-    currentFilters.topic  || currentFilters.inventoryNumber || currentFilters.q
+    currentFilters.topic  || currentFilters.inventoryNumber || currentFilters.requesterType || currentFilters.q
   );
 
   const buildParams = (overrides: Record<string, string>) => {
@@ -75,6 +75,7 @@ export function TicketList({ tickets, queues, teams, currentFilters, totalCount,
       team: currentFilters.team,
       topic: currentFilters.topic,
       inventoryNumber: currentFilters.inventoryNumber,
+      requesterType: currentFilters.requesterType,
       q: currentFilters.q,
     };
     Object.entries(carry).forEach(([k, v]) => { if (v) p.set(k, v); });
@@ -118,6 +119,15 @@ export function TicketList({ tickets, queues, teams, currentFilters, totalCount,
               {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
           )}
+
+          {/* Requester type filter */}
+          <select aria-label="Anfragesteller-Typ" className="h-8 rounded-md border border-border bg-background text-xs px-2"
+            value={currentFilters.requesterType ?? ""} onChange={(e) => applyFilter("requesterType", e.target.value)}>
+            <option value="">Alle Typen</option>
+            <option value="customer">Kunden</option>
+            <option value="employee">IT-Mitarbeiter</option>
+            <option value="team">Team-intern</option>
+          </select>
 
           {/* Topic search */}
           <div className="flex gap-1">

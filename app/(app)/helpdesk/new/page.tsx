@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import { isFullSetup } from "@/lib/features";
 import { TicketForm } from "@/components/helpdesk/TicketForm";
+import { elasticEnabled } from "@/lib/elasticsearch";
 
 export default async function NewTicketPage() {
   if (!isFullSetup) notFound();
@@ -14,9 +15,10 @@ export default async function NewTicketPage() {
   });
   if (!user?.organizationId) notFound();
 
-  const [queues, teams, orgUsers] = await Promise.all([
+  const [queues, teams, categories, orgUsers] = await Promise.all([
     prisma.ticketQueue.findMany({ where: { organizationId: user.organizationId }, orderBy: { position: "asc" } }),
     prisma.ticketTeam.findMany({ where: { organizationId: user.organizationId }, orderBy: { position: "asc" } }),
+    prisma.ticketCategory.findMany({ where: { organizationId: user.organizationId }, orderBy: { position: "asc" } }),
     prisma.user.findMany({ where: { organizationId: user.organizationId, status: "ACTIVE" }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
   ]);
 
@@ -25,7 +27,7 @@ export default async function NewTicketPage() {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-semibold text-foreground">Neues Ticket</h1>
       </div>
-      <TicketForm queues={queues} teams={teams} orgUsers={orgUsers} currentUserId={session.userId} />
+      <TicketForm queues={queues} teams={teams} categories={categories} orgUsers={orgUsers} currentUserId={session.userId} hasElastic={elasticEnabled} />
     </div>
   );
 }

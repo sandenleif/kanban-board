@@ -14,12 +14,12 @@ import { EmailCheckButton } from "@/components/helpdesk/EmailCheckButton";
 export default async function HelpdeskPage({
   searchParams,
 }: {
-  searchParams: Promise<{ view?: string; status?: string; priority?: string; queue?: string; team?: string; topic?: string; inventoryNumber?: string; q?: string; page?: string }>;
+  searchParams: Promise<{ view?: string; status?: string; priority?: string; queue?: string; team?: string; topic?: string; inventoryNumber?: string; requesterType?: string; q?: string; page?: string }>;
 }) {
   if (!isFullSetup) notFound();
 
   const session = await requireSession();
-  const { view, status, priority, queue, team, topic, inventoryNumber, q, page } = await searchParams;
+  const { view, status, priority, queue, team, topic, inventoryNumber, requesterType, q, page } = await searchParams;
 
   const user = await prisma.user.findUnique({
     where: { id: session.userId },
@@ -44,7 +44,7 @@ export default async function HelpdeskPage({
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
   const escalationThreshold = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-  const [created7, closed7, escalatedTickets, newTickets, inProgressTickets] = await Promise.all([
+  const [created7, closed7, escalatedTickets, newTickets, inProgressTickets, teamStats] = await Promise.all([
     prisma.ticket.findMany({ where: { organizationId: orgId, createdAt: { gte: sevenDaysAgo } }, select: { createdAt: true } }),
     prisma.ticket.findMany({ where: { organizationId: orgId, closedAt: { gte: sevenDaysAgo } }, select: { closedAt: true } }),
     prisma.ticket.findMany({
@@ -62,6 +62,12 @@ export default async function HelpdeskPage({
       include: { queue: { select: { name: true } }, assignedTo: { select: { name: true } }, createdBy: { select: { name: true } }, lockedBy: { select: { name: true } } },
       orderBy: { updatedAt: "desc" }, take: 5,
     }),
+    // Team stats: count open tickets per team + by requesterType
+    prisma.ticket.groupBy({
+      by: ["requesterType"],
+      where: { organizationId: orgId, status: { in: ["OPEN", "IN_PROGRESS"] } },
+      _count: { id: true },
+    }),
   ]);
 
   const whereClause = {
@@ -72,6 +78,7 @@ export default async function HelpdeskPage({
     ...(team ? { teamId: team } : {}),
     ...(topic ? { topic: { contains: topic, mode: "insensitive" as const } } : {}),
     ...(inventoryNumber ? { inventoryNumber: { contains: inventoryNumber, mode: "insensitive" as const } } : {}),
+    ...(requesterType ? { requesterType } : {}),
     ...(q ? {
       OR: [
         { title: { contains: q, mode: "insensitive" as const } },
@@ -117,9 +124,6 @@ export default async function HelpdeskPage({
         </div>
         <div className="flex items-center gap-2">
           {exchangeConfig?.enabled && <EmailCheckButton lastChecked={exchangeConfig.lastCheckedAt} />}
-          <Button asChild size="sm" variant="outline">
-            <Link href="/helpdesk/bulk">Mehrere erstellen</Link>
-          </Button>
           <Button asChild size="sm">
             <Link href="/helpdesk/new"><Plus className="h-4 w-4" /> Neues Ticket</Link>
           </Button>
@@ -132,7 +136,7 @@ export default async function HelpdeskPage({
           queues={queues}
           teams={teams}
           orgUsers={orgUsers}
-          currentFilters={{ status, priority, queue, team, topic, inventoryNumber, q }}
+          currentFilters={{ status, priority, queue, team, topic, inventoryNumber, requesterType, q }}
           isAdmin={user.isAdmin}
           totalCount={totalTickets}
           page={pageNum}
@@ -146,6 +150,8 @@ export default async function HelpdeskPage({
           inProgressTickets={inProgressTickets}
           created7={created7.map((t) => t.createdAt)}
           closed7={closed7.map((t) => t.closedAt!)}
+          teamStats={Object.fromEntries(teamStats.map((s) => [s.requesterType, s._count.id]))}
+          teams={teams}
         />
       )}
     </div>

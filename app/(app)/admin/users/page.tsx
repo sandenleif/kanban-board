@@ -8,6 +8,7 @@ import { LocaleSelector } from "@/components/admin/LocaleSelector";
 import { DangerZone } from "@/components/admin/DangerZone";
 import { SmtpSettings } from "@/components/admin/SmtpSettings";
 import { ExchangeConfigPanel } from "@/components/admin/ExchangeConfigPanel";
+import { HelpdeskAdminPanel } from "@/components/admin/HelpdeskAdminPanel";
 import { isFullSetup } from "@/lib/features";
 import { Users, Clock, CheckCircle2, Ban } from "lucide-react";
 
@@ -21,19 +22,22 @@ export default async function AdminUsersPage() {
   });
   if (!currentUser?.isAdmin) notFound();
 
-  const [users, appSettings, exchangeConfig] = await Promise.all([
+  const [users, appSettings, exchangeConfig, teams, categories] = await Promise.all([
     prisma.user.findMany({
       where: { organizationId: currentUser.organizationId },
       orderBy: [{ status: "asc" }, { createdAt: "desc" }],
-      select: {
-        id: true, name: true, email: true, status: true, isAdmin: true, createdAt: true,
-        _count: { select: { workspaceMembers: true } },
-      },
+      select: { id: true, name: true, email: true, status: true, isAdmin: true, createdAt: true, _count: { select: { workspaceMembers: true } } },
     }),
     prisma.appSettings.findUnique({ where: { organizationId: currentUser.organizationId! } }),
     isFullSetup
       ? prisma.exchangeConfig.findUnique({ where: { organizationId: currentUser.organizationId! } })
       : Promise.resolve(null),
+    isFullSetup
+      ? prisma.ticketTeam.findMany({ where: { organizationId: currentUser.organizationId! }, orderBy: { position: "asc" } })
+      : Promise.resolve([]),
+    isFullSetup
+      ? prisma.ticketCategory.findMany({ where: { organizationId: currentUser.organizationId! }, orderBy: { position: "asc" } })
+      : Promise.resolve([]),
   ]);
 
   const pending   = users.filter((u) => u.status === "PENDING").length;
@@ -85,6 +89,7 @@ export default async function AdminUsersPage() {
         smtpFrom: appSettings?.smtpFrom ?? null,
         smtpSecure: appSettings?.smtpSecure ?? false,
       }} />
+      {isFullSetup && <HelpdeskAdminPanel teams={teams} categories={categories} />}
       <UserManagementTable users={users} currentUserId={session.userId} />
       <DangerZone />
     </div>

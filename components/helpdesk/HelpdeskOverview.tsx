@@ -16,6 +16,8 @@ type TicketRow = {
   lockedBy: { name: string } | null;
 };
 
+type Team = { id: string; name: string };
+
 interface Props {
   statusMap: Record<string, number>;
   escalatedTickets: TicketRow[];
@@ -23,6 +25,8 @@ interface Props {
   inProgressTickets: TicketRow[];
   created7: Date[];
   closed7: Date[];
+  teamStats: Record<string, number>;
+  teams: Team[];
 }
 
 const DAY_LABELS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
@@ -120,19 +124,12 @@ function TicketSection({ title, tickets, emptyText, badge }: {
           </thead>
           <tbody className="divide-y divide-border">
             {tickets.map((t) => (
-              <tr key={t.id} className="hover:bg-muted/20 transition-colors">
+              <tr key={t.id} className="hover:bg-muted/20 transition-colors cursor-pointer"
+                onClick={() => window.location.href = `/helpdesk/${t.id}`}>
                 <td className="px-3 py-2"><PRIORITY_DOT priority={t.priority} /></td>
-                <td className="px-3 py-2 font-mono text-muted-foreground">
-                  <Link href={`/helpdesk/${t.id}`} className="hover:text-primary transition-colors">
-                    #{String(t.number).padStart(4, "0")}
-                  </Link>
-                </td>
+                <td className="px-3 py-2 font-mono text-muted-foreground">#{String(t.number).padStart(4, "0")}</td>
                 <td className="px-3 py-2 text-muted-foreground">{ticketAge(t.createdAt)}</td>
-                <td className="px-3 py-2">
-                  <Link href={`/helpdesk/${t.id}`} className="font-medium text-foreground hover:text-primary transition-colors line-clamp-1">
-                    {t.title}
-                  </Link>
-                </td>
+                <td className="px-3 py-2 font-medium text-foreground line-clamp-1">{t.title}</td>
                 <td className="px-3 py-2 text-muted-foreground hidden lg:table-cell">{t.queue?.name ?? "—"}</td>
                 <td className="px-3 py-2 text-muted-foreground hidden xl:table-cell">{t.assignedTo?.name ?? "—"}</td>
                 <td className="px-3 py-2 text-center hidden md:table-cell">
@@ -147,7 +144,7 @@ function TicketSection({ title, tickets, emptyText, badge }: {
   );
 }
 
-export function HelpdeskOverview({ statusMap, escalatedTickets, newTickets, inProgressTickets, created7, closed7 }: Props) {
+export function HelpdeskOverview({ statusMap, escalatedTickets, newTickets, inProgressTickets, created7, closed7, teamStats }: Props) {
   const open = statusMap["OPEN"] ?? 0;
   const inProgress = statusMap["IN_PROGRESS"] ?? 0;
   const pending = statusMap["PENDING"] ?? 0;
@@ -171,6 +168,21 @@ export function HelpdeskOverview({ statusMap, escalatedTickets, newTickets, inPr
             <Link key={s.label} href={s.href} className="rounded-xl border border-border bg-card p-3 hover:border-primary/30 transition-colors">
               <p className="text-2xl font-bold text-foreground">{s.value}</p>
               <p className={`text-xs font-medium mt-0.5 ${s.color}`}>{s.label}</p>
+            </Link>
+          ))}
+        </div>
+
+        {/* Requester type breakdown */}
+        <div className="grid grid-cols-3 gap-3">
+          {[
+            { key: "customer",  label: "Kunden",          color: "text-blue-400",   bg: "bg-blue-400/10",   href: "?view=list&requesterType=customer" },
+            { key: "employee",  label: "IT-Mitarbeiter",  color: "text-purple-400", bg: "bg-purple-400/10", href: "?view=list&requesterType=employee" },
+            { key: "team",      label: "Team-intern",     color: "text-teal-400",   bg: "bg-teal-400/10",   href: "?view=list&requesterType=team" },
+          ].map((s) => (
+            <Link key={s.key} href={s.href} className="rounded-xl border border-border bg-card p-3 hover:border-primary/30 transition-colors">
+              <p className="text-2xl font-bold text-foreground">{teamStats[s.key] ?? 0}</p>
+              <p className={`text-xs font-medium mt-0.5 ${s.color}`}>{s.label}</p>
+              <p className="text-[10px] text-muted-foreground">offen</p>
             </Link>
           ))}
         </div>
