@@ -12,7 +12,7 @@ services:
     container_name: kanban-full-setup
     restart: unless-stopped
     volumes:
-      - kanban_full_data:/data
+      - kanban_standalone_data:/data
     ports:
       - "${PORT:-5005}:3000"
     environment:
@@ -46,5 +46,5 @@ services:
       - "8080"
 
 volumes:
-  kanban_full_data:
+  kanban_standalone_data:
     external: true
