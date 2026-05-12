@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
 import type { ActionResult } from "./auth";
 import type { TicketStatus, TicketPriority } from "@prisma/client";
+import { indexTicket, deleteTicketFromIndex } from "@/lib/elasticsearch";
 
 async function requireOrgAdmin() {
   const session = await requireSession();
@@ -45,6 +46,64 @@ export async function deleteTicketQueueAction(queueId: string): Promise<ActionRe
   return { success: true };
 }
 
+// ── Team management ───────────────────────────────────────────────────────
+
+export async function createTicketTeamAction(name: string): Promise<ActionResult & { id?: string }> {
+  const { organizationId } = await requireOrgAdmin();
+  const max = await prisma.ticketTeam.aggregate({ where: { organizationId }, _max: { position: true } });
+  const team = await prisma.ticketTeam.create({
+    data: { organizationId, name: name.trim(), position: (max._max.position ?? -1) + 1 },
+  });
+  revalidatePath("/helpdesk");
+  revalidatePath("/admin/users");
+  return { success: true, id: team.id };
+}
+
+export async function deleteTicketTeamAction(teamId: string): Promise<ActionResult> {
+  const { organizationId } = await requireOrgAdmin();
+  await prisma.ticketTeam.deleteMany({ where: { id: teamId, organizationId } });
+  revalidatePath("/helpdesk");
+  revalidatePath("/admin/users");
+  return { success: true };
+}
+
+// ── Bulk ticket creation ───────────────────────────────────────────────────
+
+export async function createBulkTicketsAction(
+  tickets: {
+    title: string;
+    description?: string;
+    priority?: TicketPriority;
+    queueId?: string;
+    teamId?: string;
+    assignedToId?: string;
+    topic?: string;
+    inventoryNumber?: string;
+  }[]
+): Promise<ActionResult & { count?: number }> {
+  const { session, organizationId } = await requireOrgMember();
+  if (!tickets.length) return { error: "Keine Tickets angegeben" };
+
+  const data = tickets
+    .filter((t) => t.title?.trim())
+    .map((t) => ({
+      title: t.title.trim(),
+      description: t.description?.trim() || null,
+      priority: (t.priority as TicketPriority) || "MEDIUM",
+      queueId: t.queueId || null,
+      teamId: t.teamId || null,
+      assignedToId: t.assignedToId || null,
+      topic: t.topic?.trim() || null,
+      inventoryNumber: t.inventoryNumber?.trim() || null,
+      organizationId,
+      createdById: session.userId,
+    }));
+
+  await prisma.ticket.createMany({ data });
+  revalidatePath("/helpdesk");
+  return { success: true, count: data.length };
+}
+
 // ── Ticket CRUD ────────────────────────────────────────────────────────────
 
 export async function createTicketAction(
@@ -57,20 +116,26 @@ export async function createTicketAction(
   const description = (formData.get("description") as string)?.trim() || null;
   const priority = (formData.get("priority") as TicketPriority) || "MEDIUM";
   const queueId = (formData.get("queueId") as string) || null;
+  const teamId = (formData.get("teamId") as string) || null;
   const assignedToId = (formData.get("assignedToId") as string) || null;
+  const topic = (formData.get("topic") as string)?.trim() || null;
+  const inventoryNumber = (formData.get("inventoryNumber") as string)?.trim() || null;
 
   if (!title) return { error: "Titel ist erforderlich" };
 
   const ticket = await prisma.ticket.create({
     data: {
-      title,
-      description,
-      priority,
-      queueId,
-      assignedToId,
-      organizationId,
-      createdById: session.userId,
+      title, description, priority, queueId, teamId, assignedToId,
+      topic, inventoryNumber, organizationId, createdById: session.userId,
     },
+  });
+
+  // Index in Elasticsearch (non-blocking)
+  void indexTicket({
+    id: ticket.id, organizationId, number: ticket.number, title, description,
+    topic, inventoryNumber, fromEmail: null, fromName: null,
+    status: "OPEN", priority, queueName: null, teamName: null, assigneeName: null,
+    createdAt: ticket.createdAt.toISOString(),
   });
 
   revalidatePath("/helpdesk");
@@ -84,6 +149,9 @@ export async function updateTicketAction(
     priority?: TicketPriority;
     assignedToId?: string | null;
     queueId?: string | null;
+    teamId?: string | null;
+    topic?: string | null;
+    inventoryNumber?: string | null;
     title?: string;
     description?: string | null;
   }
@@ -105,6 +173,7 @@ export async function updateTicketAction(
 export async function deleteTicketAction(ticketId: string): Promise<ActionResult> {
   const { organizationId } = await requireOrgAdmin();
   await prisma.ticket.deleteMany({ where: { id: ticketId, organizationId } });
+  void deleteTicketFromIndex(ticketId);
   revalidatePath("/helpdesk");
   return { success: true };
 }

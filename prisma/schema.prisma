@@ -88,6 +88,7 @@ model Organization {
   workspaces     Workspace[]
   settings       AppSettings?
   ticketQueues   TicketQueue[]
+  ticketTeams    TicketTeam[]
   tickets        Ticket[]
   exchangeConfig ExchangeConfig?
 
@@ -385,6 +386,19 @@ model TicketQueue {
   @@map("ticket_queues")
 }
 
+model TicketTeam {
+  id             String   @id @default(cuid())
+  name           String
+  organizationId String
+  position       Int      @default(0)
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  tickets      Ticket[]
+
+  @@map("ticket_teams")
+}
+
 model Ticket {
   id             String         @id @default(cuid())
   number         Int            @default(autoincrement())
@@ -400,21 +414,27 @@ model Ticket {
   emailMessageId String?
   fromEmail      String?
   fromName       String?
-  locked         Boolean        @default(false)
-  lockedById     String?
-  lockedAt       DateTime?
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
-  closedAt       DateTime?
+  teamId          String?
+  topic           String?
+  inventoryNumber String?
+  locked          Boolean        @default(false)
+  lockedById      String?
+  lockedAt        DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  closedAt        DateTime?
 
   organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   queue        TicketQueue?    @relation(fields: [queueId], references: [id], onDelete: SetNull)
+  team         TicketTeam?     @relation(fields: [teamId], references: [id], onDelete: SetNull)
   createdBy    User            @relation("TicketCreator", fields: [createdById], references: [id])
   assignedTo   User?           @relation("TicketAssignee", fields: [assignedToId], references: [id])
   lockedBy     User?           @relation("TicketLocker", fields: [lockedById], references: [id])
   comments     TicketComment[]
 
   @@index([organizationId, status])
+  @@index([organizationId, topic])
+  @@index([organizationId, inventoryNumber])
   @@map("tickets")
 }
 

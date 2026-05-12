@@ -28,24 +28,27 @@ type Ticket = {
   id: string; number: number; title: string; description: string | null;
   status: TicketStatus; priority: TicketPriority;
   locked: boolean; lockedAt: Date | null;
+  topic: string | null; inventoryNumber: string | null;
   fromEmail: string | null; fromName: string | null;
   createdAt: Date; closedAt: Date | null; linkedTaskId: string | null;
   createdBy: { name: string };
   assignedTo: { id: string; name: string } | null;
   lockedBy: { id: string; name: string } | null;
   queue: { id: string; name: string } | null;
+  team:  { id: string; name: string } | null;
   comments: Comment[];
 };
 type Queue = { id: string; name: string };
+type Team  = { id: string; name: string };
 type OrgUser = { id: string; name: string };
 type WorkspaceEntry = { id: string; name: string; projects: { id: string; name: string }[] };
 
 interface Props {
-  ticket: Ticket; queues: Queue[]; orgUsers: OrgUser[];
+  ticket: Ticket; queues: Queue[]; teams: Team[]; orgUsers: OrgUser[];
   allWorkspaces: WorkspaceEntry[]; currentUserId: string; isAdmin: boolean;
 }
 
-export function TicketDetail({ ticket, queues, orgUsers, allWorkspaces, currentUserId, isAdmin }: Props) {
+export function TicketDetail({ ticket, queues, teams, orgUsers, allWorkspaces, currentUserId, isAdmin }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [showConvert, setShowConvert] = useState(false);
@@ -271,6 +274,40 @@ export function TicketDetail({ ticket, queues, orgUsers, allWorkspaces, currentU
                 </select>
               </div>
             )}
+
+            {/* Team editable */}
+            {teams.length > 0 && (
+              <div>
+                <p className="text-muted-foreground mb-1">Team</p>
+                <select aria-label="Team" className="w-full h-7 rounded border border-border bg-background text-xs px-2"
+                  value={ticket.team?.id ?? ""} onChange={(e) => update({ teamId: e.target.value || null })} disabled={isPending}>
+                  <option value="">—</option>
+                  {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+              </div>
+            )}
+
+            {/* Topic */}
+            <div>
+              <p className="text-muted-foreground mb-1">Thema</p>
+              <input
+                className="w-full h-7 rounded border border-border bg-background text-xs px-2 text-foreground"
+                defaultValue={ticket.topic ?? ""}
+                placeholder="Thema…"
+                onBlur={(e) => { if (e.target.value !== (ticket.topic ?? "")) update({ topic: e.target.value || null }); }}
+              />
+            </div>
+
+            {/* Inventory */}
+            <div>
+              <p className="text-muted-foreground mb-1">Inventarnummer</p>
+              <input
+                className="w-full h-7 rounded border border-border bg-background text-xs px-2 font-mono text-foreground"
+                defaultValue={ticket.inventoryNumber ?? ""}
+                placeholder="INV-…"
+                onBlur={(e) => { if (e.target.value !== (ticket.inventoryNumber ?? "")) update({ inventoryNumber: e.target.value || null }); }}
+              />
+            </div>
 
             {/* Assignee editable */}
             <div>

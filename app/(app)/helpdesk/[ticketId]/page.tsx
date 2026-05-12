@@ -20,7 +20,7 @@ export default async function TicketDetailPage({
   });
   if (!user?.organizationId) notFound();
 
-  const [ticket, queues, orgUsers, workspaceMemberships] = await Promise.all([
+  const [ticket, queues, teams, orgUsers, workspaceMemberships] = await Promise.all([
     prisma.ticket.findFirst({
       where: { id: ticketId, organizationId: user.organizationId },
       include: {
@@ -28,33 +28,19 @@ export default async function TicketDetailPage({
         assignedTo: { select: { id: true, name: true } },
         lockedBy: { select: { id: true, name: true } },
         queue: { select: { id: true, name: true } },
+        team:  { select: { id: true, name: true } },
         comments: {
           include: { author: { select: { id: true, name: true } } },
           orderBy: { createdAt: "asc" },
         },
       },
     }),
-    prisma.ticketQueue.findMany({
-      where: { organizationId: user.organizationId },
-      orderBy: { position: "asc" },
-    }),
-    prisma.user.findMany({
-      where: { organizationId: user.organizationId, status: "ACTIVE" },
-      select: { id: true, name: true },
-      orderBy: { name: "asc" },
-    }),
+    prisma.ticketQueue.findMany({ where: { organizationId: user.organizationId }, orderBy: { position: "asc" } }),
+    prisma.ticketTeam.findMany({ where: { organizationId: user.organizationId }, orderBy: { position: "asc" } }),
+    prisma.user.findMany({ where: { organizationId: user.organizationId, status: "ACTIVE" }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
     prisma.workspaceMember.findMany({
       where: { userId: session.userId },
-      include: {
-        workspace: {
-          include: {
-            projects: {
-              where: { status: "ACTIVE" },
-              select: { id: true, name: true },
-            },
-          },
-        },
-      },
+      include: { workspace: { include: { projects: { where: { status: "ACTIVE" }, select: { id: true, name: true } } } } },
     }),
   ]);
 
@@ -70,6 +56,7 @@ export default async function TicketDetailPage({
     <TicketDetail
       ticket={ticket}
       queues={queues}
+      teams={teams}
       orgUsers={orgUsers}
       allWorkspaces={allWorkspaces}
       currentUserId={session.userId}

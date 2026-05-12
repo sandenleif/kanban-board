@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { AlertCircle, Loader2 } from "lucide-react";
 
 type Queue = { id: string; name: string };
+type Team  = { id: string; name: string };
 type OrgUser = { id: string; name: string };
 
 const PRIORITIES = [
@@ -20,8 +21,9 @@ const PRIORITIES = [
   { value: "URGENT", label: "Dringend" },
 ];
 
-export function TicketForm({ queues, orgUsers, currentUserId }: {
+export function TicketForm({ queues, teams, orgUsers, currentUserId }: {
   queues: Queue[];
+  teams: Team[];
   orgUsers: OrgUser[];
   currentUserId: string;
 }) {
@@ -29,17 +31,14 @@ export function TicketForm({ queues, orgUsers, currentUserId }: {
   const [state, action, isPending] = useActionState(createTicketAction, {});
 
   useEffect(() => {
-    if (state.success && state.ticketId) {
-      router.push(`/helpdesk/${state.ticketId}`);
-    }
+    if (state.success && state.ticketId) router.push(`/helpdesk/${state.ticketId}`);
   }, [state.success, state.ticketId, router]);
 
   return (
     <form action={action} className="space-y-5 rounded-xl border border-border bg-card p-6">
       {state.error && (
         <div className="flex items-center gap-2 rounded-md bg-destructive/10 border border-destructive/20 px-3 py-2 text-sm text-destructive">
-          <AlertCircle className="h-4 w-4 shrink-0" />
-          {state.error}
+          <AlertCircle className="h-4 w-4 shrink-0" />{state.error}
         </div>
       )}
 
@@ -50,7 +49,7 @@ export function TicketForm({ queues, orgUsers, currentUserId }: {
 
       <div className="space-y-1.5">
         <Label htmlFor="description">Beschreibung</Label>
-        <Textarea id="description" name="description" placeholder="Detaillierte Beschreibung…" rows={5} />
+        <Textarea id="description" name="description" placeholder="Detaillierte Beschreibung…" rows={4} />
       </div>
 
       <div className="grid grid-cols-2 gap-4">
@@ -71,12 +70,32 @@ export function TicketForm({ queues, orgUsers, currentUserId }: {
           </div>
         )}
 
+        {teams.length > 0 && (
+          <div className="space-y-1.5">
+            <Label htmlFor="teamId">Team</Label>
+            <select id="teamId" name="teamId" className="w-full h-9 rounded-md border border-border bg-background text-sm px-3">
+              <option value="">Kein Team</option>
+              {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </div>
+        )}
+
         <div className="space-y-1.5">
           <Label htmlFor="assignedToId">Zuweisen an</Label>
           <select id="assignedToId" name="assignedToId" defaultValue={currentUserId} className="w-full h-9 rounded-md border border-border bg-background text-sm px-3">
             <option value="">Niemanden</option>
             {orgUsers.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
           </select>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="topic">Thema / Kategorie</Label>
+          <Input id="topic" name="topic" placeholder="z.B. Hardware, Software, Netzwerk" />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="inventoryNumber">Inventarnummer</Label>
+          <Input id="inventoryNumber" name="inventoryNumber" placeholder="z.B. INV-2024-0042" />
         </div>
       </div>
 

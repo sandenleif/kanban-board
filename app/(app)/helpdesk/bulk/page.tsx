@@ -2,9 +2,9 @@ import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import { isFullSetup } from "@/lib/features";
-import { TicketForm } from "@/components/helpdesk/TicketForm";
+import { BulkTicketForm } from "@/components/helpdesk/BulkTicketForm";
 
-export default async function NewTicketPage() {
+export default async function BulkTicketPage() {
   if (!isFullSetup) notFound();
 
   const session = await requireSession();
@@ -21,11 +21,12 @@ export default async function NewTicketPage() {
   ]);
 
   return (
-    <div className="max-w-2xl mx-auto animate-in">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold text-foreground">Neues Ticket</h1>
+    <div className="max-w-5xl mx-auto animate-in">
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold text-foreground">Mehrere Tickets erstellen</h1>
+        <p className="text-sm text-muted-foreground mt-1">Füge Zeilen hinzu und erstelle alle Tickets auf einmal.</p>
       </div>
-      <TicketForm queues={queues} teams={teams} orgUsers={orgUsers} currentUserId={session.userId} />
+      <BulkTicketForm queues={queues} teams={teams} orgUsers={orgUsers} currentUserId={session.userId} />
     </div>
   );
 }

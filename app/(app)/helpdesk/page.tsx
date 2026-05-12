@@ -14,12 +14,12 @@ import { EmailCheckButton } from "@/components/helpdesk/EmailCheckButton";
 export default async function HelpdeskPage({
   searchParams,
 }: {
-  searchParams: Promise<{ view?: string; status?: string; priority?: string; queue?: string; q?: string; page?: string }>;
+  searchParams: Promise<{ view?: string; status?: string; priority?: string; queue?: string; team?: string; topic?: string; inventoryNumber?: string; q?: string; page?: string }>;
 }) {
   if (!isFullSetup) notFound();
 
   const session = await requireSession();
-  const { view, status, priority, queue, q, page } = await searchParams;
+  const { view, status, priority, queue, team, topic, inventoryNumber, q, page } = await searchParams;
 
   const user = await prisma.user.findUnique({
     where: { id: session.userId },
@@ -32,8 +32,9 @@ export default async function HelpdeskPage({
   const pageNum = Math.max(1, parseInt(page ?? "1"));
   const isListView = view === "list";
 
-  const [queues, exchangeConfig, orgUsers, stats] = await Promise.all([
+  const [queues, teams, exchangeConfig, orgUsers, stats] = await Promise.all([
     prisma.ticketQueue.findMany({ where: { organizationId: orgId }, orderBy: { position: "asc" } }),
+    prisma.ticketTeam.findMany({ where: { organizationId: orgId }, orderBy: { position: "asc" } }),
     prisma.exchangeConfig.findUnique({ where: { organizationId: orgId }, select: { enabled: true, lastCheckedAt: true } }),
     prisma.user.findMany({ where: { organizationId: orgId, status: "ACTIVE" }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
     prisma.ticket.groupBy({ by: ["status"], where: { organizationId: orgId }, _count: { id: true } }),
@@ -68,7 +69,18 @@ export default async function HelpdeskPage({
     ...(status ? { status: status as never } : {}),
     ...(priority ? { priority: priority as never } : {}),
     ...(queue ? { queueId: queue } : {}),
-    ...(q ? { title: { contains: q, mode: "insensitive" as const } } : {}),
+    ...(team ? { teamId: team } : {}),
+    ...(topic ? { topic: { contains: topic, mode: "insensitive" as const } } : {}),
+    ...(inventoryNumber ? { inventoryNumber: { contains: inventoryNumber, mode: "insensitive" as const } } : {}),
+    ...(q ? {
+      OR: [
+        { title: { contains: q, mode: "insensitive" as const } },
+        { topic: { contains: q, mode: "insensitive" as const } },
+        { inventoryNumber: { contains: q, mode: "insensitive" as const } },
+        { fromEmail: { contains: q, mode: "insensitive" as const } },
+        { fromName: { contains: q, mode: "insensitive" as const } },
+      ],
+    } : {}),
   };
 
   const [tickets, totalTickets] = isListView ? await Promise.all([
@@ -79,6 +91,7 @@ export default async function HelpdeskPage({
         assignedTo: { select: { id: true, name: true } },
         lockedBy: { select: { id: true, name: true } },
         queue: { select: { id: true, name: true } },
+        team: { select: { id: true, name: true } },
         _count: { select: { comments: true } },
       },
       orderBy: { createdAt: "desc" },
@@ -104,6 +117,9 @@ export default async function HelpdeskPage({
         </div>
         <div className="flex items-center gap-2">
           {exchangeConfig?.enabled && <EmailCheckButton lastChecked={exchangeConfig.lastCheckedAt} />}
+          <Button asChild size="sm" variant="outline">
+            <Link href="/helpdesk/bulk">Mehrere erstellen</Link>
+          </Button>
           <Button asChild size="sm">
             <Link href="/helpdesk/new"><Plus className="h-4 w-4" /> Neues Ticket</Link>
           </Button>
@@ -114,8 +130,9 @@ export default async function HelpdeskPage({
         <TicketList
           tickets={tickets}
           queues={queues}
+          teams={teams}
           orgUsers={orgUsers}
-          currentFilters={{ status, priority, queue, q }}
+          currentFilters={{ status, priority, queue, team, topic, inventoryNumber, q }}
           isAdmin={user.isAdmin}
           totalCount={totalTickets}
           page={pageNum}
