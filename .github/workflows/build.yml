@@ -32,7 +32,7 @@ jobs:
           file: Dockerfile.standalone
           push: true
           tags: ghcr.io/${{ github.repository }}:standalone
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           cache-from: type=gha,scope=standalone
           cache-to: type=gha,mode=max,scope=standalone
 
@@ -63,6 +63,6 @@ jobs:
           file: Dockerfile.full-setup
           push: true
           tags: ghcr.io/${{ github.repository }}:full-setup
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           cache-from: type=gha,scope=full-setup
           cache-to: type=gha,mode=max,scope=full-setup
