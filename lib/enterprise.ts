@@ -1,1 +1,1 @@
-export const isEnterprise = process.env.ENTERPRISE_MODE === "true";
+export { isEnterprise } from "./features";

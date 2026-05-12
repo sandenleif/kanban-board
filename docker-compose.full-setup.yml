@@ -1,0 +1,50 @@
+# Full-Setup: Kanban Board + Ticketsystem + Watchtower
+#
+# Start: docker compose -f docker-compose.full-setup.yml up -d
+#
+# GHCR-Authentifizierung (wenn Image privat):
+#   GHCR_USER=sandenleif
+#   GHCR_TOKEN=<GitHub Personal Access Token mit read:packages>
+
+services:
+  kanban:
+    image: ghcr.io/sandenleif/kanban-board:full-setup
+    container_name: kanban-full-setup
+    restart: unless-stopped
+    volumes:
+      - kanban_full_data:/data
+    ports:
+      - "${PORT:-5005}:3000"
+    environment:
+      - WATCHTOWER_TOKEN=${WATCHTOWER_TOKEN:-kanban-update-secret}
+      - WATCHTOWER_URL=http://watchtower:8080
+      - FULL_SETUP=true
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    depends_on:
+      - watchtower
+
+  watchtower:
+    image: containrrr/watchtower:latest
+    container_name: kanban-full-watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${DOCKER_CONFIG:-~/.docker}/config.json:/config.json:ro
+    environment:
+      - WATCHTOWER_HTTP_API_TOKEN=${WATCHTOWER_TOKEN:-kanban-update-secret}
+      - WATCHTOWER_HTTP_API_UPDATE=true
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_LABEL_ENABLE=true
+      - WATCHTOWER_NO_STARTUP_MESSAGE=true
+      - DOCKER_CONFIG=/
+      - DOCKER_API_VERSION=1.41
+      - REPO_USER=${GHCR_USER:-}
+      - REPO_PASS=${GHCR_TOKEN:-}
+    command: --http-api-update
+    expose:
+      - "8080"
+
+volumes:
+  kanban_full_data:
+    external: true

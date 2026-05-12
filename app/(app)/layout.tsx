@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Topbar } from "@/components/layout/Topbar";
-import { isEnterprise } from "@/lib/enterprise";
+import { isEnterprise, isFullSetup } from "@/lib/features";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await requireSession();
@@ -78,6 +78,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         isAdmin={user.isAdmin}
         logoSrc={logoSrc}
         isEnterprise={isEnterprise}
+        isFullSetup={isFullSetup}
       />
       <div className="flex flex-1 flex-col overflow-hidden">
         <Topbar session={session} avatarSrc={avatarSrc} notifications={notifications} />

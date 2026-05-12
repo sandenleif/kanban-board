@@ -15,6 +15,7 @@ import {
   ShieldCheck,
   User,
   Database,
+  Headphones,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -32,9 +33,10 @@ interface SidebarProps {
   isAdmin: boolean;
   logoSrc: string | null;
   isEnterprise: boolean;
+  isFullSetup: boolean;
 }
 
-export function Sidebar({ workspaces, session: _, isAdmin, logoSrc, isEnterprise }: SidebarProps) {
+export function Sidebar({ workspaces, session: _, isAdmin, logoSrc, isEnterprise, isFullSetup }: SidebarProps) {
   const t = useTranslations("nav");
   const pathname = usePathname();
   const [expandedWorkspaces, setExpandedWorkspaces] = useState<Set<string>>(
@@ -115,6 +117,23 @@ export function Sidebar({ workspaces, session: _, isAdmin, logoSrc, isEnterprise
               {t("personalSpace")}
             </Link>
           </div>
+
+          {isFullSetup && (
+            <div className="px-2 mb-1">
+              <Link
+                href="/helpdesk"
+                className={cn(
+                  "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium transition-colors",
+                  pathname.startsWith("/helpdesk")
+                    ? "bg-sidebar-accent text-foreground"
+                    : "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
+                )}
+              >
+                <Headphones className="h-4 w-4 shrink-0" />
+                Helpdesk
+              </Link>
+            </div>
+          )}
 
           <div className="mt-4 px-4 mb-1 flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/60">

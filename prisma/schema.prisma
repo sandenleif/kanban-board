@@ -61,6 +61,21 @@ enum ChecklistItemPriority {
   URGENT
 }
 
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  PENDING
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
 model Organization {
   id        String    @id @default(cuid())
   name      String
@@ -69,9 +84,12 @@ model Organization {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
-  users      User[]
-  workspaces Workspace[]
-  settings   AppSettings?
+  users          User[]
+  workspaces     Workspace[]
+  settings       AppSettings?
+  ticketQueues   TicketQueue[]
+  tickets        Ticket[]
+  exchangeConfig ExchangeConfig?
 
   @@map("organizations")
 }
@@ -123,6 +141,9 @@ model User {
   notifications       Notification[]
   personalSpace       PersonalSpace?
   passwordResetTokens PasswordResetToken[]
+  createdTickets      Ticket[]             @relation("TicketCreator")
+  assignedTickets     Ticket[]             @relation("TicketAssignee")
+  ticketComments      TicketComment[]
 
   @@map("users")
 }
@@ -345,6 +366,84 @@ model Notification {
 
   @@index([userId, read])
   @@map("notifications")
+}
+
+// ── Ticket System (full-setup only) ───────────────────────────────────────
+
+model TicketQueue {
+  id             String   @id @default(cuid())
+  name           String
+  organizationId String
+  position       Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  tickets      Ticket[]
+
+  @@map("ticket_queues")
+}
+
+model Ticket {
+  id             String         @id @default(cuid())
+  number         Int            @default(autoincrement())
+  title          String
+  description    String?        @db.Text
+  status         TicketStatus   @default(OPEN)
+  priority       TicketPriority @default(MEDIUM)
+  organizationId String
+  queueId        String?
+  createdById    String
+  assignedToId   String?
+  linkedTaskId   String?
+  emailMessageId String?
+  fromEmail      String?
+  fromName       String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  closedAt       DateTime?
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  queue        TicketQueue?    @relation(fields: [queueId], references: [id], onDelete: SetNull)
+  createdBy    User            @relation("TicketCreator", fields: [createdById], references: [id])
+  assignedTo   User?           @relation("TicketAssignee", fields: [assignedToId], references: [id])
+  comments     TicketComment[]
+
+  @@index([organizationId, status])
+  @@map("tickets")
+}
+
+model TicketComment {
+  id         String   @id @default(cuid())
+  ticketId   String
+  authorId   String
+  content    String   @db.Text
+  isInternal Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author User   @relation(fields: [authorId], references: [id])
+
+  @@map("ticket_comments")
+}
+
+model ExchangeConfig {
+  id             String    @id @default(cuid())
+  organizationId String    @unique
+  host           String
+  port           Int       @default(993)
+  username       String
+  password       String
+  mailbox        String    @default("INBOX")
+  useSSL         Boolean   @default(true)
+  enabled        Boolean   @default(false)
+  lastCheckedAt  DateTime?
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("exchange_configs")
 }
 
 // ── Password Reset ─────────────────────────────────────────────────────────

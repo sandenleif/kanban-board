@@ -7,6 +7,8 @@ import { LogoUpload } from "@/components/admin/LogoUpload";
 import { LocaleSelector } from "@/components/admin/LocaleSelector";
 import { DangerZone } from "@/components/admin/DangerZone";
 import { SmtpSettings } from "@/components/admin/SmtpSettings";
+import { ExchangeConfigPanel } from "@/components/admin/ExchangeConfigPanel";
+import { isFullSetup } from "@/lib/features";
 import { Users, Clock, CheckCircle2, Ban } from "lucide-react";
 
 export default async function AdminUsersPage() {
@@ -19,7 +21,7 @@ export default async function AdminUsersPage() {
   });
   if (!currentUser?.isAdmin) notFound();
 
-  const [users, appSettings] = await Promise.all([
+  const [users, appSettings, exchangeConfig] = await Promise.all([
     prisma.user.findMany({
       where: { organizationId: currentUser.organizationId },
       orderBy: [{ status: "asc" }, { createdAt: "desc" }],
@@ -29,6 +31,9 @@ export default async function AdminUsersPage() {
       },
     }),
     prisma.appSettings.findUnique({ where: { organizationId: currentUser.organizationId! } }),
+    isFullSetup
+      ? prisma.exchangeConfig.findUnique({ where: { organizationId: currentUser.organizationId! } })
+      : Promise.resolve(null),
   ]);
 
   const pending   = users.filter((u) => u.status === "PENDING").length;
@@ -62,6 +67,17 @@ export default async function AdminUsersPage() {
 
       <LocaleSelector currentLocale={appSettings?.locale ?? "en"} />
       <LogoUpload currentLogo={appSettings} />
+      {isFullSetup && (
+        <ExchangeConfigPanel initial={exchangeConfig ? {
+          host: exchangeConfig.host,
+          port: exchangeConfig.port,
+          username: exchangeConfig.username,
+          mailbox: exchangeConfig.mailbox,
+          useSSL: exchangeConfig.useSSL,
+          enabled: exchangeConfig.enabled,
+          lastCheckedAt: exchangeConfig.lastCheckedAt,
+        } : null} />
+      )}
       <SmtpSettings initial={{
         smtpHost: appSettings?.smtpHost ?? null,
         smtpPort: appSettings?.smtpPort ?? null,

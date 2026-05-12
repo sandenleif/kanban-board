@@ -1,0 +1,60 @@
+# ─── Stage 1: Install dependencies ───────────────────────────────────────────
+FROM node:20-alpine AS deps
+WORKDIR /app
+
+RUN apk add --no-cache libc6-compat openssl
+
+COPY package*.json ./
+RUN npm ci --frozen-lockfile
+
+# ─── Stage 2: Build ───────────────────────────────────────────────────────────
+FROM node:20-alpine AS builder
+WORKDIR /app
+
+RUN apk add --no-cache libc6-compat openssl
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+
+ENV DATABASE_URL="postgresql://build:build@localhost:5432/build"
+ENV JWT_SECRET="build-time-placeholder-not-used-at-runtime-xxxxxxxxx"
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV FULL_SETUP=true
+
+RUN npx prisma generate
+RUN mkdir -p public
+RUN npm run build
+
+# ─── Stage 3: All-in-one runner (PostgreSQL + Next.js + Ticketsystem) ─────────
+FROM node:20-alpine AS runner
+WORKDIR /app
+
+RUN apk add --no-cache libc6-compat openssl postgresql16 su-exec && \
+    addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs && \
+    mkdir -p /run/postgresql && \
+    chown postgres:postgres /run/postgresql
+
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV FULL_SETUP=true
+
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static      ./.next/static
+COPY --from=builder /app/public            ./public
+
+COPY --from=builder /app/prisma                ./prisma
+COPY --from=builder /app/node_modules/.prisma  ./node_modules/.prisma
+COPY --from=builder /app/node_modules/@prisma  ./node_modules/@prisma
+COPY --from=builder /app/node_modules/prisma   ./node_modules/prisma
+
+COPY scripts/entrypoint-standalone.sh ./entrypoint.sh
+RUN sed -i 's/\r$//' ./entrypoint.sh && chmod +x ./entrypoint.sh
+
+VOLUME ["/data"]
+
+EXPOSE 3000
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+
+ENTRYPOINT ["./entrypoint.sh"]
