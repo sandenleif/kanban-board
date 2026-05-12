@@ -81,11 +81,22 @@ export default async function HelpdeskPage({
     ...(requesterType ? { requesterType } : {}),
     ...(q ? {
       OR: [
-        { title: { contains: q, mode: "insensitive" as const } },
-        { topic: { contains: q, mode: "insensitive" as const } },
+        { title:           { contains: q, mode: "insensitive" as const } },
+        { description:     { contains: q, mode: "insensitive" as const } },
+        { topic:           { contains: q, mode: "insensitive" as const } },
         { inventoryNumber: { contains: q, mode: "insensitive" as const } },
-        { fromEmail: { contains: q, mode: "insensitive" as const } },
-        { fromName: { contains: q, mode: "insensitive" as const } },
+        { fromEmail:       { contains: q, mode: "insensitive" as const } },
+        { fromName:        { contains: q, mode: "insensitive" as const } },
+        { requesterType:   { contains: q, mode: "insensitive" as const } },
+        // Search by ticket number if query is numeric
+        ...(/^\d+$/.test(q) ? [{ number: parseInt(q) }] : []),
+        // Related fields
+        { queue:    { name: { contains: q, mode: "insensitive" as const } } },
+        { team:     { name: { contains: q, mode: "insensitive" as const } } },
+        { category: { name: { contains: q, mode: "insensitive" as const } } },
+        { assignedTo: { name: { contains: q, mode: "insensitive" as const } } },
+        { createdBy:  { name: { contains: q, mode: "insensitive" as const } } },
+        { comments:   { some: { content: { contains: q, mode: "insensitive" as const } } } },
       ],
     } : {}),
   };

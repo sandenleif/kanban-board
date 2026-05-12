@@ -51,6 +51,14 @@ export async function GET(req: NextRequest) {
       { inventoryNumber: { contains: q, mode: "insensitive" as const } },
       { fromEmail:       { contains: q, mode: "insensitive" as const } },
       { fromName:        { contains: q, mode: "insensitive" as const } },
+      { requesterType:   { contains: q, mode: "insensitive" as const } },
+      ...(/^\d+$/.test(q) ? [{ number: parseInt(q) }] : []),
+      { queue:     { name: { contains: q, mode: "insensitive" as const } } },
+      { team:      { name: { contains: q, mode: "insensitive" as const } } },
+      { category:  { name: { contains: q, mode: "insensitive" as const } } },
+      { assignedTo: { name: { contains: q, mode: "insensitive" as const } } },
+      { createdBy:  { name: { contains: q, mode: "insensitive" as const } } },
+      { comments:   { some: { content: { contains: q, mode: "insensitive" as const } } } },
     ],
   };
 
