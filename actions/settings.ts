@@ -50,6 +50,20 @@ export async function removeLogoAction(): Promise<ActionResult> {
   return { success: true };
 }
 
+export async function updateSiteTitleAction(siteTitle: string): Promise<ActionResult> {
+  const { organizationId } = await requireAdmin();
+  const value = siteTitle.trim().slice(0, 60) || null;
+
+  await prisma.appSettings.upsert({
+    where: { organizationId },
+    create: { organizationId, siteTitle: value },
+    update: { siteTitle: value },
+  });
+
+  revalidatePath("/", "layout");
+  return { success: true };
+}
+
 export async function updateLocaleAction(locale: string): Promise<ActionResult> {
   const { organizationId } = await requireAdmin();
   if (!["en", "de", "fr", "es"].includes(locale)) return { error: "Invalid locale" };

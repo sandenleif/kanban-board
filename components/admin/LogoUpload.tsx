@@ -4,13 +4,15 @@ import { useTransition, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-import { uploadLogoAction, removeLogoAction } from "@/actions/settings";
+import { uploadLogoAction, removeLogoAction, updateSiteTitleAction } from "@/actions/settings";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Upload, Trash2, ImageIcon, Loader2 } from "lucide-react";
+import { Upload, Trash2, ImageIcon, Loader2, Check } from "lucide-react";
 
 interface LogoUploadProps {
-  currentLogo?: { logoBase64: string | null; logoMimeType: string | null } | null;
+  currentLogo?: { logoBase64: string | null; logoMimeType: string | null; siteTitle?: string | null } | null;
 }
 
 export function LogoUpload({ currentLogo }: LogoUploadProps) {
@@ -92,6 +94,47 @@ export function LogoUpload({ currentLogo }: LogoUploadProps) {
           </div>
         </div>
       </CardContent>
+      <CardContent className="border-t border-border pt-4">
+        <SiteTitleField current={currentLogo?.siteTitle} />
+      </CardContent>
     </Card>
+  );
+}
+
+function SiteTitleField({ current }: { current?: string | null }) {
+  const [value, setValue] = useState(current ?? "");
+  const [saved, setSaved] = useState(false);
+  const [isPending, startTransition] = useTransition();
+
+  const handleSave = () => {
+    startTransition(async () => {
+      const r = await updateSiteTitleAction(value);
+      if (r.error) { toast.error(r.error); return; }
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    });
+  };
+
+  return (
+    <div className="space-y-2">
+      <Label htmlFor="siteTitle">Seitentitel (Laufschrift)</Label>
+      <div className="flex gap-2">
+        <Input
+          id="siteTitle"
+          value={value}
+          onChange={(e) => { setValue(e.target.value.slice(0, 60)); setSaved(false); }}
+          placeholder="z.B. Meine IT-Abteilung"
+          maxLength={60}
+          className="flex-1"
+        />
+        <Button size="sm" onClick={handleSave} disabled={isPending}>
+          {saved ? <Check className="h-4 w-4 text-green-400" /> : isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Speichern"}
+        </Button>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Wird als Laufschrift im Header angezeigt: <span className="italic">"{value || "Ihr Titel"} · KanbanFlow · via sanden-hosting.org / Leif Sanden"</span>
+        {value && <span className="ml-1">({value.length}/60)</span>}
+      </p>
+    </div>
   );
 }

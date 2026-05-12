@@ -19,6 +19,7 @@ import Link from "next/link";
 import type { SessionPayload } from "@/lib/auth";
 import { ThemeToggle } from "./ThemeToggle";
 import { NotificationBell } from "./NotificationBell";
+import { SiteMarquee } from "./SiteMarquee";
 
 type Notification = {
   id: string; type: string; message: string; read: boolean; createdAt: Date | string;
@@ -29,9 +30,10 @@ interface TopbarProps {
   session: SessionPayload;
   avatarSrc?: string | null;
   notifications?: Notification[];
+  siteTitle?: string | null;
 }
 
-export function Topbar({ session, avatarSrc, notifications = [] }: TopbarProps) {
+export function Topbar({ session, avatarSrc, notifications = [], siteTitle }: TopbarProps) {
   const t = useTranslations("topbar");
   const [isPending, startTransition] = useTransition();
 
@@ -41,7 +43,7 @@ export function Topbar({ session, avatarSrc, notifications = [] }: TopbarProps) 
 
   return (
     <header className="flex h-14 items-center justify-between border-b border-border bg-background px-6">
-      <div />
+      <SiteMarquee siteTitle={siteTitle} />
       <div className="flex items-center gap-1">
         <NotificationBell initialNotifications={notifications} />
         <ThemeToggle />

@@ -74,7 +74,7 @@ export default async function AdminUsersPage() {
       </div>
 
       <LocaleSelector currentLocale={appSettings?.locale ?? "en"} />
-      <LogoUpload currentLogo={appSettings} />
+      <LogoUpload currentLogo={appSettings ? { ...appSettings, siteTitle: appSettings.siteTitle } : null} />
       {isFullSetup && (
         <ExchangeConfigPanel initial={exchangeConfig ? {
           host: exchangeConfig.host,
