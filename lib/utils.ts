@@ -39,6 +39,17 @@ export function formatDate(date: Date | string | null | undefined): string {
   });
 }
 
+export function ticketAge(date: Date | string): string {
+  const ms = Date.now() - new Date(date).getTime();
+  const totalMinutes = Math.floor(ms / 60000);
+  const days = Math.floor(totalMinutes / 1440);
+  const hours = Math.floor((totalMinutes % 1440) / 60);
+  if (days > 0) return `${days} d ${hours} h`;
+  const mins = totalMinutes % 60;
+  if (hours > 0) return `${hours} h ${mins} m`;
+  return `${mins} m`;
+}
+
 export function isOverdue(date: Date | string | null | undefined): boolean {
   if (!date) return false;
   return new Date(date) < new Date();

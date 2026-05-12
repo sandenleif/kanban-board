@@ -143,6 +143,7 @@ model User {
   passwordResetTokens PasswordResetToken[]
   createdTickets      Ticket[]             @relation("TicketCreator")
   assignedTickets     Ticket[]             @relation("TicketAssignee")
+  lockedTickets       Ticket[]             @relation("TicketLocker")
   ticketComments      TicketComment[]
 
   @@map("users")
@@ -399,6 +400,9 @@ model Ticket {
   emailMessageId String?
   fromEmail      String?
   fromName       String?
+  locked         Boolean        @default(false)
+  lockedById     String?
+  lockedAt       DateTime?
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
   closedAt       DateTime?
@@ -407,6 +411,7 @@ model Ticket {
   queue        TicketQueue?    @relation(fields: [queueId], references: [id], onDelete: SetNull)
   createdBy    User            @relation("TicketCreator", fields: [createdById], references: [id])
   assignedTo   User?           @relation("TicketAssignee", fields: [assignedToId], references: [id])
+  lockedBy     User?           @relation("TicketLocker", fields: [lockedById], references: [id])
   comments     TicketComment[]
 
   @@index([organizationId, status])

@@ -141,6 +141,30 @@ export async function deleteTicketCommentAction(commentId: string): Promise<Acti
   return { success: true };
 }
 
+// ── Lock / Unlock ─────────────────────────────────────────────────────────
+
+export async function lockTicketAction(ticketId: string): Promise<ActionResult> {
+  const { session, organizationId } = await requireOrgMember();
+  await prisma.ticket.updateMany({
+    where: { id: ticketId, organizationId, locked: false },
+    data: { locked: true, lockedById: session.userId, lockedAt: new Date() },
+  });
+  revalidatePath(`/helpdesk/${ticketId}`);
+  revalidatePath("/helpdesk");
+  return { success: true };
+}
+
+export async function unlockTicketAction(ticketId: string): Promise<ActionResult> {
+  const { organizationId } = await requireOrgMember();
+  await prisma.ticket.updateMany({
+    where: { id: ticketId, organizationId },
+    data: { locked: false, lockedById: null, lockedAt: null },
+  });
+  revalidatePath(`/helpdesk/${ticketId}`);
+  revalidatePath("/helpdesk");
+  return { success: true };
+}
+
 // ── Convert ticket to Kanban task ──────────────────────────────────────────
 
 export async function convertTicketToTaskAction(

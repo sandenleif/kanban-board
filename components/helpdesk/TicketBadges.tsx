@@ -29,3 +29,14 @@ export function PriorityLabel({ priority }: { priority: TicketPriority }) {
   const cfg = PRIORITY_CONFIG[priority];
   return <span className={cn("text-xs font-medium", cfg.cls)}>{cfg.label}</span>;
 }
+
+const PRIORITY_DOT_COLOR: Record<TicketPriority, string> = {
+  LOW:    "bg-blue-400",
+  MEDIUM: "bg-gray-400",
+  HIGH:   "bg-orange-400",
+  URGENT: "bg-red-500",
+};
+
+export function PRIORITY_DOT({ priority }: { priority: TicketPriority }) {
+  return <span className={cn("inline-block w-2.5 h-2.5 rounded-sm shrink-0", PRIORITY_DOT_COLOR[priority])} title={PRIORITY_CONFIG[priority].label} />;
+}

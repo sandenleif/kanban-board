@@ -26,6 +26,7 @@ export default async function TicketDetailPage({
       include: {
         createdBy: { select: { id: true, name: true } },
         assignedTo: { select: { id: true, name: true } },
+        lockedBy: { select: { id: true, name: true } },
         queue: { select: { id: true, name: true } },
         comments: {
           include: { author: { select: { id: true, name: true } } },

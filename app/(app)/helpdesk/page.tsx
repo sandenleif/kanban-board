@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
@@ -6,17 +8,18 @@ import Link from "next/link";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TicketList } from "@/components/helpdesk/TicketList";
+import { HelpdeskOverview } from "@/components/helpdesk/HelpdeskOverview";
 import { EmailCheckButton } from "@/components/helpdesk/EmailCheckButton";
 
 export default async function HelpdeskPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; priority?: string; queue?: string; q?: string }>;
+  searchParams: Promise<{ view?: string; status?: string; priority?: string; queue?: string; q?: string; page?: string }>;
 }) {
   if (!isFullSetup) notFound();
 
   const session = await requireSession();
-  const { status, priority, queue, q } = await searchParams;
+  const { view, status, priority, queue, q, page } = await searchParams;
 
   const user = await prisma.user.findUnique({
     where: { id: session.userId },
@@ -24,64 +27,110 @@ export default async function HelpdeskPage({
   });
   if (!user?.organizationId) notFound();
 
-  const [tickets, queues, exchangeConfig, orgUsers] = await Promise.all([
+  const orgId = user.organizationId;
+  const LIMIT = 25;
+  const pageNum = Math.max(1, parseInt(page ?? "1"));
+  const isListView = view === "list";
+
+  const [queues, exchangeConfig, orgUsers, stats] = await Promise.all([
+    prisma.ticketQueue.findMany({ where: { organizationId: orgId }, orderBy: { position: "asc" } }),
+    prisma.exchangeConfig.findUnique({ where: { organizationId: orgId }, select: { enabled: true, lastCheckedAt: true } }),
+    prisma.user.findMany({ where: { organizationId: orgId, status: "ACTIVE" }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    prisma.ticket.groupBy({ by: ["status"], where: { organizationId: orgId }, _count: { id: true } }),
+  ]);
+
+  const statusMap = Object.fromEntries(stats.map((s) => [s.status, s._count.id]));
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const escalationThreshold = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+  const [created7, closed7, escalatedTickets, newTickets, inProgressTickets] = await Promise.all([
+    prisma.ticket.findMany({ where: { organizationId: orgId, createdAt: { gte: sevenDaysAgo } }, select: { createdAt: true } }),
+    prisma.ticket.findMany({ where: { organizationId: orgId, closedAt: { gte: sevenDaysAgo } }, select: { closedAt: true } }),
     prisma.ticket.findMany({
-      where: {
-        organizationId: user.organizationId,
-        ...(status ? { status: status as never } : {}),
-        ...(priority ? { priority: priority as never } : {}),
-        ...(queue ? { queueId: queue } : {}),
-        ...(q ? { title: { contains: q, mode: "insensitive" } } : {}),
-      },
+      where: { organizationId: orgId, status: { in: ["OPEN", "IN_PROGRESS"] }, createdAt: { lt: escalationThreshold } },
+      include: { queue: { select: { name: true } }, assignedTo: { select: { name: true } }, createdBy: { select: { name: true } }, lockedBy: { select: { name: true } } },
+      orderBy: { createdAt: "asc" }, take: 10,
+    }),
+    prisma.ticket.findMany({
+      where: { organizationId: orgId, status: "OPEN" },
+      include: { queue: { select: { name: true } }, assignedTo: { select: { name: true } }, createdBy: { select: { name: true } }, lockedBy: { select: { name: true } } },
+      orderBy: { createdAt: "desc" }, take: 10,
+    }),
+    prisma.ticket.findMany({
+      where: { organizationId: orgId, status: "IN_PROGRESS" },
+      include: { queue: { select: { name: true } }, assignedTo: { select: { name: true } }, createdBy: { select: { name: true } }, lockedBy: { select: { name: true } } },
+      orderBy: { updatedAt: "desc" }, take: 5,
+    }),
+  ]);
+
+  const whereClause = {
+    organizationId: orgId,
+    ...(status ? { status: status as never } : {}),
+    ...(priority ? { priority: priority as never } : {}),
+    ...(queue ? { queueId: queue } : {}),
+    ...(q ? { title: { contains: q, mode: "insensitive" as const } } : {}),
+  };
+
+  const [tickets, totalTickets] = isListView ? await Promise.all([
+    prisma.ticket.findMany({
+      where: whereClause,
       include: {
         createdBy: { select: { id: true, name: true } },
         assignedTo: { select: { id: true, name: true } },
+        lockedBy: { select: { id: true, name: true } },
         queue: { select: { id: true, name: true } },
         _count: { select: { comments: true } },
       },
-      orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+      orderBy: { createdAt: "desc" },
+      skip: (pageNum - 1) * LIMIT,
+      take: LIMIT,
     }),
-    prisma.ticketQueue.findMany({
-      where: { organizationId: user.organizationId },
-      orderBy: { position: "asc" },
-    }),
-    prisma.exchangeConfig.findUnique({
-      where: { organizationId: user.organizationId },
-      select: { enabled: true, lastCheckedAt: true },
-    }),
-    prisma.user.findMany({
-      where: { organizationId: user.organizationId, status: "ACTIVE" },
-      select: { id: true, name: true },
-      orderBy: { name: "asc" },
-    }),
-  ]);
+    prisma.ticket.count({ where: whereClause }),
+  ]) : [[], 0];
 
   return (
     <div className="flex flex-col h-full animate-in">
       <div className="flex items-center justify-between mb-5 shrink-0">
-        <div>
+        <div className="flex items-center gap-3">
           <h1 className="text-2xl font-semibold text-foreground">Helpdesk</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            {tickets.length} Tickets · {tickets.filter((t) => t.status === "OPEN").length} offen
-          </p>
+          <div className="flex rounded-lg border border-border overflow-hidden text-xs font-medium">
+            <Link href="/helpdesk" className={`px-3 py-1.5 transition-colors ${!isListView ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"}`}>
+              Übersicht
+            </Link>
+            <Link href="/helpdesk?view=list" className={`px-3 py-1.5 transition-colors ${isListView ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"}`}>
+              Alle Tickets
+            </Link>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           {exchangeConfig?.enabled && <EmailCheckButton lastChecked={exchangeConfig.lastCheckedAt} />}
           <Button asChild size="sm">
-            <Link href="/helpdesk/new">
-              <Plus className="h-4 w-4 mr-1" /> Neues Ticket
-            </Link>
+            <Link href="/helpdesk/new"><Plus className="h-4 w-4" /> Neues Ticket</Link>
           </Button>
         </div>
       </div>
 
-      <TicketList
-        tickets={tickets}
-        queues={queues}
-        orgUsers={orgUsers}
-        currentFilters={{ status, priority, queue, q }}
-        isAdmin={user.isAdmin}
-      />
+      {isListView ? (
+        <TicketList
+          tickets={tickets}
+          queues={queues}
+          orgUsers={orgUsers}
+          currentFilters={{ status, priority, queue, q }}
+          isAdmin={user.isAdmin}
+          totalCount={totalTickets}
+          page={pageNum}
+          limit={LIMIT}
+        />
+      ) : (
+        <HelpdeskOverview
+          statusMap={statusMap}
+          escalatedTickets={escalatedTickets}
+          newTickets={newTickets}
+          inProgressTickets={inProgressTickets}
+          created7={created7.map((t) => t.createdAt)}
+          closed7={closed7.map((t) => t.closedAt!)}
+        />
+      )}
     </div>
   );
 }

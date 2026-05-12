@@ -2,25 +2,37 @@
 
 import { useState, useTransition, useActionState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Trash2, MoveRight, Loader2, Lock, MessageSquare, Folder } from "lucide-react";
+import {
+  ArrowLeft, Trash2, MoveRight, Loader2, Lock, LockOpen,
+  MessageSquare, Folder, Clock, User, Tag, Inbox,
+} from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { StatusBadge, PriorityLabel, STATUS_CONFIG, PRIORITY_CONFIG } from "./TicketBadges";
-import { updateTicketAction, deleteTicketAction, addTicketCommentAction, convertTicketToTaskAction } from "@/actions/ticket";
-import { formatDate, getInitials } from "@/lib/utils";
+import { StatusBadge, PriorityLabel, STATUS_CONFIG, PRIORITY_CONFIG, PRIORITY_DOT } from "./TicketBadges";
+import {
+  updateTicketAction, deleteTicketAction, addTicketCommentAction,
+  convertTicketToTaskAction, lockTicketAction, unlockTicketAction,
+} from "@/actions/ticket";
+import { formatDate, getInitials, ticketAge } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import type { TicketStatus, TicketPriority } from "@prisma/client";
 
-type Comment = { id: string; content: string; isInternal: boolean; createdAt: Date; author: { id: string; name: string } };
+type Comment = {
+  id: string; content: string; isInternal: boolean;
+  createdAt: Date; author: { id: string; name: string };
+};
 type Ticket = {
   id: string; number: number; title: string; description: string | null;
   status: TicketStatus; priority: TicketPriority;
+  locked: boolean; lockedAt: Date | null;
   fromEmail: string | null; fromName: string | null;
   createdAt: Date; closedAt: Date | null; linkedTaskId: string | null;
-  createdBy: { name: string }; assignedTo: { id: string; name: string } | null;
+  createdBy: { name: string };
+  assignedTo: { id: string; name: string } | null;
+  lockedBy: { id: string; name: string } | null;
   queue: { id: string; name: string } | null;
   comments: Comment[];
 };
@@ -50,6 +62,14 @@ export function TicketDetail({ ticket, queues, orgUsers, allWorkspaces, currentU
     });
   };
 
+  const handleLock = () => {
+    startTransition(async () => {
+      const r = ticket.locked ? await unlockTicketAction(ticket.id) : await lockTicketAction(ticket.id);
+      if (r.error) toast.error(r.error);
+      else router.refresh();
+    });
+  };
+
   const handleDelete = () => {
     if (!confirm("Ticket wirklich löschen?")) return;
     startTransition(async () => {
@@ -68,156 +88,222 @@ export function TicketDetail({ ticket, queues, orgUsers, allWorkspaces, currentU
   };
 
   const targetProjects = allWorkspaces.find((w) => w.id === convertWs)?.projects ?? [];
+  const sender = ticket.fromName ?? ticket.fromEmail ?? ticket.createdBy.name;
 
   return (
-    <div className="max-w-4xl mx-auto animate-in">
-      {/* Back + actions */}
-      <div className="flex items-center justify-between mb-5">
-        <Link href="/helpdesk" className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
-          <ArrowLeft className="h-4 w-4" /> Helpdesk
+    <div className="flex flex-col h-full -m-6">
+      {/* OTOBO-style toolbar */}
+      <div className="flex items-center gap-1 px-4 py-2 border-b border-border bg-card text-sm flex-wrap shrink-0">
+        <Link href="/helpdesk" className="flex items-center gap-1 px-2.5 py-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors text-xs">
+          <ArrowLeft className="h-3.5 w-3.5" /> Zurück
         </Link>
-        <div className="flex gap-2">
-          <Button size="sm" variant="outline" onClick={() => setShowConvert(true)}>
-            <MoveRight className="h-3.5 w-3.5 mr-1" /> Als Task
-          </Button>
-          {isAdmin && (
-            <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={handleDelete} disabled={isPending}>
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
-          )}
-        </div>
+        <span className="text-border">|</span>
+        <button type="button" onClick={handleLock} disabled={isPending}
+          className="flex items-center gap-1 px-2.5 py-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors text-xs">
+          {ticket.locked ? <LockOpen className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
+          {ticket.locked ? "Entsperren" : "Sperren"}
+        </button>
+        <span className="text-border">|</span>
+        <button type="button" onClick={() => setShowConvert(true)}
+          className="flex items-center gap-1 px-2.5 py-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors text-xs">
+          <MoveRight className="h-3.5 w-3.5" /> Als Task anlegen
+        </button>
+        {["OPEN", "IN_PROGRESS"].includes(ticket.status) && (
+          <>
+            <span className="text-border">|</span>
+            <button type="button" onClick={() => update({ status: "CLOSED" as TicketStatus })} disabled={isPending}
+              className="flex items-center gap-1 px-2.5 py-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors text-xs">
+              Schließen
+            </button>
+          </>
+        )}
+        {isAdmin && (
+          <>
+            <span className="text-border">|</span>
+            <button type="button" onClick={handleDelete} disabled={isPending}
+              className="flex items-center gap-1 px-2.5 py-1 rounded hover:bg-destructive/10 text-destructive transition-colors text-xs">
+              <Trash2 className="h-3.5 w-3.5" /> Löschen
+            </button>
+          </>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main */}
-        <div className="lg:col-span-2 space-y-6">
-          <div className="rounded-xl border border-border bg-card p-5">
-            <div className="flex items-start justify-between gap-2 mb-3">
-              <div>
-                <p className="text-xs text-muted-foreground font-mono mb-1">Ticket #{ticket.number}</p>
-                <h1 className="text-xl font-semibold text-foreground">{ticket.title}</h1>
-                {ticket.fromEmail && (
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Von: {ticket.fromName ?? ""} &lt;{ticket.fromEmail}&gt;
-                  </p>
-                )}
-              </div>
-              <StatusBadge status={ticket.status} />
+      {/* Main content */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Left: ticket + articles */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-5">
+          {/* Ticket header */}
+          <div className="flex items-start gap-3">
+            <PRIORITY_DOT priority={ticket.priority} />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-muted-foreground font-mono">
+                Ticket #{String(ticket.number).padStart(4, "0")}
+              </p>
+              <h1 className="text-lg font-semibold text-foreground leading-tight mt-0.5">{ticket.title}</h1>
+              {ticket.fromEmail && (
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  Von: {ticket.fromName ? `${ticket.fromName} <${ticket.fromEmail}>` : ticket.fromEmail}
+                </p>
+              )}
             </div>
-            {ticket.description ? (
-              <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">{ticket.description}</p>
-            ) : (
-              <p className="text-sm text-muted-foreground/50 italic">Keine Beschreibung</p>
-            )}
+            <StatusBadge status={ticket.status} />
           </div>
 
-          {/* Comments */}
-          <div className="space-y-3">
-            <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
-              <MessageSquare className="h-4 w-4 text-muted-foreground" />
-              Kommentare ({ticket.comments.length})
+          {/* Article overview */}
+          <div>
+            <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-1.5">
+              <Inbox className="h-3.5 w-3.5" />
+              Artikelübersicht — {ticket.comments.length + 1} Artikel
             </h2>
 
-            {ticket.comments.map((c) => (
-              <div key={c.id} className={cn("rounded-lg border p-4", c.isInternal && "border-yellow-400/20 bg-yellow-400/5")}>
-                <div className="flex items-center gap-2 mb-2">
-                  <Avatar className="h-6 w-6">
-                    <AvatarFallback className="text-[10px] bg-primary/20 text-primary">{getInitials(c.author.name)}</AvatarFallback>
+            {/* Original ticket as first article */}
+            <div className="rounded-lg border border-border bg-card mb-3">
+              <div className="flex items-center gap-3 px-4 py-2.5 border-b border-border bg-muted/30 text-xs text-muted-foreground">
+                <span className="font-mono font-semibold text-foreground">1</span>
+                <User className="h-3.5 w-3.5" />
+                <span className="font-medium text-foreground">{sender}</span>
+                <span>via System</span>
+                <span className="flex-1 truncate text-foreground">{ticket.title}</span>
+                <span>{formatDate(ticket.createdAt)}</span>
+              </div>
+              <div className="px-4 py-3">
+                {ticket.description ? (
+                  <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">{ticket.description}</p>
+                ) : (
+                  <p className="text-sm text-muted-foreground/50 italic">Keine Beschreibung</p>
+                )}
+              </div>
+            </div>
+
+            {/* Comments as articles */}
+            {ticket.comments.map((c, idx) => (
+              <div key={c.id} className={cn("rounded-lg border mb-3", c.isInternal ? "border-yellow-400/30 bg-yellow-400/5" : "border-border bg-card")}>
+                <div className="flex items-center gap-3 px-4 py-2.5 border-b border-border/50 bg-muted/20 text-xs text-muted-foreground">
+                  <span className="font-mono font-semibold text-foreground">{idx + 2}</span>
+                  <Avatar className="h-5 w-5">
+                    <AvatarFallback className="text-[8px] bg-primary/20 text-primary">{getInitials(c.author.name)}</AvatarFallback>
                   </Avatar>
-                  <span className="text-xs font-semibold">{c.author.name}</span>
-                  <span className="text-xs text-muted-foreground">{formatDate(c.createdAt)}</span>
+                  <span className="font-medium text-foreground">{c.author.name}</span>
+                  <span>via OTOBO</span>
+                  <span className="flex-1 truncate text-foreground">{ticket.title}</span>
+                  <span>{formatDate(c.createdAt)}</span>
                   {c.isInternal && (
-                    <span className="flex items-center gap-1 text-[10px] text-yellow-500 bg-yellow-400/10 rounded px-1.5 py-0.5 ml-auto">
+                    <span className="flex items-center gap-1 text-yellow-500 bg-yellow-400/10 rounded px-1.5 py-0.5">
                       <Lock className="h-2.5 w-2.5" /> Intern
                     </span>
                   )}
                 </div>
-                <p className="text-sm text-muted-foreground whitespace-pre-wrap">{c.content}</p>
+                <div className="px-4 py-3">
+                  <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">{c.content}</p>
+                </div>
               </div>
             ))}
 
-            {/* Add comment */}
-            <form action={commentAction} className="space-y-2">
-              <input type="hidden" name="ticketId" value={ticket.id} />
-              <input type="hidden" name="isInternal" value={String(isInternal)} />
-              <Textarea name="content" placeholder="Kommentar hinzufügen…" rows={3} required
-                defaultValue={commentState.success ? "" : undefined} key={String(commentState.success)} />
-              <div className="flex items-center gap-3">
-                <Button type="submit" size="sm" disabled={commentPending}>
-                  {commentPending && <Loader2 className="animate-spin h-3.5 w-3.5" />}
-                  Senden
-                </Button>
-                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
-                  <input type="checkbox" checked={isInternal} onChange={(e) => setIsInternal(e.target.checked)} className="accent-yellow-500" />
-                  Intern (nicht für Kunden sichtbar)
-                </label>
+            {/* Reply form */}
+            <div className="rounded-lg border border-border bg-card">
+              <div className="px-4 py-2.5 border-b border-border bg-muted/30 text-xs font-semibold text-muted-foreground flex items-center gap-2">
+                <MessageSquare className="h-3.5 w-3.5" />
+                Antworten
               </div>
-            </form>
+              <div className="p-4">
+                <form action={commentAction} className="space-y-3">
+                  <input type="hidden" name="ticketId" value={ticket.id} />
+                  <input type="hidden" name="isInternal" value={String(isInternal)} />
+                  <Textarea name="content" placeholder="Antwort eingeben…" rows={4} required
+                    key={String(commentState.success)}
+                    defaultValue={commentState.success ? "" : undefined} />
+                  <div className="flex items-center justify-between">
+                    <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
+                      <input type="checkbox" checked={isInternal} onChange={(e) => setIsInternal(e.target.checked)} className="accent-yellow-500" />
+                      Intern (nicht für Kunden)
+                    </label>
+                    <Button type="submit" size="sm" disabled={commentPending}>
+                      {commentPending && <Loader2 className="animate-spin h-3.5 w-3.5" />}
+                      Senden
+                    </Button>
+                  </div>
+                  {commentState.error && <p className="text-xs text-destructive">{commentState.error}</p>}
+                </form>
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Sidebar */}
-        <div className="space-y-4">
-          <div className="rounded-xl border border-border bg-card p-4 space-y-4 text-sm">
+        {/* Right: process info sidebar */}
+        <div className="w-64 shrink-0 border-l border-border overflow-y-auto bg-muted/5">
+          {/* Prozessinformationen header */}
+          <div className="px-4 py-2.5 border-b border-border bg-muted/30">
+            <h3 className="text-xs font-semibold text-foreground">Prozessinformationen</h3>
+          </div>
+
+          <div className="px-4 py-3 space-y-3 text-xs">
+            <InfoRow label="Alter" value={ticketAge(ticket.createdAt)} icon={<Clock className="h-3 w-3" />} />
+            <InfoRow label="Erstellt" value={formatDate(ticket.createdAt)} />
+            <InfoRow label="Sperrung" value={ticket.locked ? `Gesperrt (${ticket.lockedBy?.name ?? "?"})` : "frei"}
+              className={ticket.locked ? "text-yellow-400" : "text-green-400"} />
+
+            {/* Status editable */}
             <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Status</p>
-              <select
-                className="w-full h-8 rounded-md border border-border bg-background text-sm px-2"
-                value={ticket.status}
-                onChange={(e) => update({ status: e.target.value as TicketStatus })}
-                disabled={isPending}
-              >
+              <p className="text-muted-foreground mb-1 flex items-center gap-1"><Tag className="h-3 w-3" /> Status</p>
+              <select aria-label="Status" className="w-full h-7 rounded border border-border bg-background text-xs px-2"
+                value={ticket.status} onChange={(e) => update({ status: e.target.value as TicketStatus })} disabled={isPending}>
                 {Object.entries(STATUS_CONFIG).map(([v, c]) => <option key={v} value={v}>{c.label}</option>)}
               </select>
             </div>
 
+            {/* Priority editable */}
             <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Priorität</p>
-              <select
-                className="w-full h-8 rounded-md border border-border bg-background text-sm px-2"
-                value={ticket.priority}
-                onChange={(e) => update({ priority: e.target.value as TicketPriority })}
-                disabled={isPending}
-              >
+              <p className="text-muted-foreground mb-1">Priorität</p>
+              <select aria-label="Priorität" className="w-full h-7 rounded border border-border bg-background text-xs px-2"
+                value={ticket.priority} onChange={(e) => update({ priority: e.target.value as TicketPriority })} disabled={isPending}>
                 {Object.entries(PRIORITY_CONFIG).map(([v, c]) => <option key={v} value={v}>{c.label}</option>)}
               </select>
             </div>
 
+            {/* Queue editable */}
             {queues.length > 0 && (
               <div>
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Queue</p>
-                <select
-                  className="w-full h-8 rounded-md border border-border bg-background text-sm px-2"
-                  value={ticket.queue?.id ?? ""}
-                  onChange={(e) => update({ queueId: e.target.value || null })}
-                  disabled={isPending}
-                >
+                <p className="text-muted-foreground mb-1">Queue</p>
+                <select aria-label="Queue" className="w-full h-7 rounded border border-border bg-background text-xs px-2"
+                  value={ticket.queue?.id ?? ""} onChange={(e) => update({ queueId: e.target.value || null })} disabled={isPending}>
                   <option value="">Keine Queue</option>
                   {queues.map((q) => <option key={q.id} value={q.id}>{q.name}</option>)}
                 </select>
               </div>
             )}
 
+            {/* Assignee editable */}
             <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Zugewiesen an</p>
-              <select
-                className="w-full h-8 rounded-md border border-border bg-background text-sm px-2"
-                value={ticket.assignedTo?.id ?? ""}
-                onChange={(e) => update({ assignedToId: e.target.value || null })}
-                disabled={isPending}
-              >
-                <option value="">Niemanden</option>
+              <p className="text-muted-foreground mb-1 flex items-center gap-1"><User className="h-3 w-3" /> Besitzer</p>
+              <select aria-label="Besitzer" className="w-full h-7 rounded border border-border bg-background text-xs px-2"
+                value={ticket.assignedTo?.id ?? ""} onChange={(e) => update({ assignedToId: e.target.value || null })} disabled={isPending}>
+                <option value="">—</option>
                 {orgUsers.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
               </select>
             </div>
 
-            <div className="pt-2 border-t border-border space-y-1 text-xs text-muted-foreground">
-              <p>Erstellt von: <span className="text-foreground">{ticket.createdBy.name}</span></p>
-              <p>Am: <span className="text-foreground">{formatDate(ticket.createdAt)}</span></p>
-              {ticket.closedAt && <p>Geschlossen: <span className="text-foreground">{formatDate(ticket.closedAt)}</span></p>}
-              {ticket.linkedTaskId && <p className="text-green-500">✓ Als Task angelegt</p>}
+            <div className="border-t border-border pt-2 space-y-1.5 text-muted-foreground">
+              <InfoRow label="Erstellt von" value={ticket.createdBy.name} />
+              {ticket.closedAt && <InfoRow label="Geschlossen" value={formatDate(ticket.closedAt)} />}
+              {ticket.fromEmail && <InfoRow label="E-Mail" value={ticket.fromEmail} />}
+              {ticket.linkedTaskId && (
+                <p className="text-green-500 flex items-center gap-1"><MoveRight className="h-3 w-3" /> Als Task angelegt</p>
+              )}
             </div>
           </div>
+
+          {/* Kundeninformation */}
+          {(ticket.fromEmail || ticket.fromName) && (
+            <>
+              <div className="px-4 py-2.5 border-t border-b border-border bg-muted/30">
+                <h3 className="text-xs font-semibold text-foreground">Kundeninformation</h3>
+              </div>
+              <div className="px-4 py-3 space-y-1.5 text-xs text-muted-foreground">
+                {ticket.fromName && <InfoRow label="Name" value={ticket.fromName} />}
+                {ticket.fromEmail && <InfoRow label="E-Mail" value={ticket.fromEmail} />}
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -229,25 +315,37 @@ export function TicketDetail({ ticket, queues, orgUsers, allWorkspaces, currentU
               <Folder className="h-4 w-4 text-primary" />
               <h3 className="font-semibold text-sm">Ticket als Task anlegen</h3>
             </div>
-            <select className="w-full h-8 rounded-md border border-border bg-background text-sm px-2"
+            <select aria-label="Workspace wählen" className="w-full h-8 rounded-md border border-border bg-background text-sm px-2"
               value={convertWs} onChange={(e) => { setConvertWs(e.target.value); setConvertProject(""); }}>
               <option value="">Workspace wählen…</option>
               {allWorkspaces.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
             </select>
             {convertWs && (
-              <select className="w-full h-8 rounded-md border border-border bg-background text-sm px-2"
+              <select aria-label="Projekt wählen" className="w-full h-8 rounded-md border border-border bg-background text-sm px-2"
                 value={convertProject} onChange={(e) => setConvertProject(e.target.value)}>
                 <option value="">Projekt wählen…</option>
                 {targetProjects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             )}
             <div className="flex justify-end gap-2">
-              <Button variant="outline" size="sm" onClick={() => setShowConvert(false)}>Abbrechen</Button>
-              <Button size="sm" onClick={handleConvert} disabled={!convertProject || isPending}>Anlegen</Button>
+              <Button type="button" variant="outline" size="sm" onClick={() => setShowConvert(false)}>Abbrechen</Button>
+              <Button type="button" size="sm" onClick={handleConvert} disabled={!convertProject || isPending}>
+                {isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                Anlegen
+              </Button>
             </div>
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function InfoRow({ label, value, icon, className }: { label: string; value: string; icon?: React.ReactNode; className?: string }) {
+  return (
+    <div className="flex justify-between gap-2">
+      <span className="text-muted-foreground flex items-center gap-1 shrink-0">{icon}{label}</span>
+      <span className={cn("text-foreground text-right truncate", className)}>{value}</span>
     </div>
   );
 }
