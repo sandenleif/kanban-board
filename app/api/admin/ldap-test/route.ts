@@ -27,7 +27,12 @@ export async function POST(req: NextRequest) {
 
     const result = await new Promise<{ ok: boolean; message: string; entries?: number }>((resolve) => {
       const url = `ldap://${host}:${port ?? 389}`;
-      const client = ldap.createClient({ url, timeout: 8000, connectTimeout: 6000 });
+      const client = ldap.createClient({
+        url,
+        timeout: 8000,
+        connectTimeout: 6000,
+        referrals: false,          // don't follow AD referrals
+      } as Parameters<typeof ldap.createClient>[0]);
 
       let resolved = false;
       const done = (val: { ok: boolean; message: string; entries?: number }) => {
@@ -79,6 +84,7 @@ export async function POST(req: NextRequest) {
                 }
                 let count = 0;
                 const samples: string[] = [];
+                r2.on("searchReference", () => {}); // ignore referrals
                 r2.on("searchEntry", (entry) => {
                   count++;
                   const get = (a: string) =>
@@ -109,6 +115,7 @@ export async function POST(req: NextRequest) {
               const name = get("displayName") || get("cn");
               if (name && samples.length < 3) samples.push(name);
             });
+            res.on("searchReference", () => {}); // ignore AD referrals
             res.on("error", (e: Error) => done({ ok: false, message: `Suche Fehler: ${e.message}` }));
             res.on("end", () => {
               if (count === 0) {

@@ -68,7 +68,7 @@ async function searchLdap(
     if (!ldap) return [];
 
     return await new Promise((resolve) => {
-      const client = ldap.createClient({ url: `ldap://${config.host}:${config.port}`, timeout: 4000, connectTimeout: 4000 });
+      const client = ldap.createClient({ url: `ldap://${config.host}:${config.port}`, timeout: 6000, connectTimeout: 6000, referrals: false } as Parameters<typeof ldap.createClient>[0]);
       client.on("error", () => resolve([]));
 
       client.bind(config.bindDn, config.bindPassword, (err) => {
@@ -87,6 +87,7 @@ async function searchLdap(
 
           const results: { name: string; email: string; source: string }[] = [];
 
+          res.on("searchReference", () => {}); // ignore AD referrals
           res.on("searchEntry", (entry) => {
             const get = (attr: string) =>
               entry.pojo?.attributes?.find((a: { type: string; values: string[] }) => a.type === attr)?.values?.[0] ?? "";

@@ -89,7 +89,7 @@ async function tryLdapLogin(
     if (!ldap) return null;
 
     return await new Promise((resolve) => {
-      const client = ldap.createClient({ url: `ldap://${config.host}:${config.port}`, timeout: 5000 });
+      const client = ldap.createClient({ url: `ldap://${config.host}:${config.port}`, timeout: 5000, referrals: false } as Parameters<typeof ldap.createClient>[0]);
       client.on("error", () => resolve(null));
 
       // First bind with service account to search for the user
