@@ -29,7 +29,10 @@ export async function POST(req: NextRequest) {
       const url = `ldap://${host}:${port ?? 389}`;
       const client = ldap.createClient({ url, timeout: 8000, connectTimeout: 6000 });
 
+      let resolved = false;
       const done = (val: { ok: boolean; message: string; entries?: number }) => {
+        if (resolved) return;
+        resolved = true;
         clearTimeout(timeoutId);
         try { client.destroy(); } catch { /* ignore */ }
         resolve(val);
@@ -50,29 +53,27 @@ export async function POST(req: NextRequest) {
             return;
           }
 
-          // Step 1: verify baseDn exists
-          client.search(baseDn, { filter: "(objectClass=*)", scope: "base", attributes: ["dn"], sizeLimit: 1 }, (e1, r1) => {
-            if (e1) {
-              done({ ok: false, message: `Bind OK ✓ — Base DN ungültig: "${baseDn}" → ${e1.message}` });
-              return;
-            }
-            let baseDnOk = false;
-            r1.on("searchEntry", () => { baseDnOk = true; });
-            r1.on("error", (e: Error) => done({ ok: false, message: `Base DN Fehler: ${e.message}` }));
-            r1.on("end", () => {
-              if (!baseDnOk) {
-                done({ ok: false, message: `Bind OK ✓ — Base DN nicht gefunden: "${baseDn}"` });
-                return;
-              }
-
-              // Step 2: try user search with configured filter
-              const filter = userFilter?.trim() || "(objectClass=person)";
-              client.search(baseDn, { filter, scope: "sub", attributes: ["cn", "displayName", "mail"], sizeLimit: 5 }, (e2, r2) => {
+          // Directly search users — skip base DN verification (AD often blocks scope:base on root)
+          const filter = userFilter?.trim() || "(objectClass=person)";
+          client.search(baseDn, {
+            filter,
+            scope: "sub",
+            attributes: ["cn", "displayName", "mail", "sAMAccountName"],
+            sizeLimit: 5,
+          }, (searchErr, res) => {
+            if (searchErr) {
+              // Try alternative filter for AD (objectClass=user instead of person)
+              const altFilter = "(objectClass=user)";
+              client.search(baseDn, {
+                filter: altFilter,
+                scope: "sub",
+                attributes: ["cn", "displayName", "mail"],
+                sizeLimit: 5,
+              }, (e2, r2) => {
                 if (e2) {
-                  // Retry with simpler filter
                   done({
                     ok: false,
-                    message: `Bind OK ✓  Base DN OK ✓ — Suche fehlgeschlagen mit Filter "${filter}": ${e2.message}. Tipp: Versuche Filter "(objectClass=user)" oder "(objectClass=*)"`,
+                    message: `Bind OK ✓ — Suche fehlgeschlagen.\nFilter "${filter}": ${searchErr.message}\nFilter "${altFilter}": ${e2.message}\n→ Prüfe Base DN und Leserechte des Bind-Users.`,
                   });
                   return;
                 }
@@ -80,30 +81,41 @@ export async function POST(req: NextRequest) {
                 const samples: string[] = [];
                 r2.on("searchEntry", (entry) => {
                   count++;
-                  const get = (attr: string) =>
+                  const get = (a: string) =>
                     (entry.pojo?.attributes as { type: string; values: string[] }[] | undefined)
-                      ?.find((a) => a.type === attr)?.values?.[0] ?? "";
+                      ?.find((x) => x.type === a)?.values?.[0] ?? "";
                   const name = get("displayName") || get("cn");
                   if (name && samples.length < 3) samples.push(name);
                 });
-                r2.on("error", (e: Error) => {
-                  done({ ok: false, message: `Bind OK ✓  Base DN OK ✓ — Suche Fehler: ${e.message}` });
-                });
+                r2.on("error", (e: Error) => done({ ok: false, message: `Suche Fehler: ${e.message}` }));
                 r2.on("end", () => {
                   if (count === 0) {
-                    done({
-                      ok: false,
-                      message: `Bind OK ✓  Base DN OK ✓ — Keine Einträge mit Filter "${filter}" gefunden. Prüfe den Filter oder die Leserechte des Bind-Users.`,
-                    });
+                    done({ ok: false, message: `Bind OK ✓ — Mit Filter "${altFilter}" gefunden: 0 Einträge. Prüfe den Base DN "${baseDn}".` });
                   } else {
-                    done({
-                      ok: true,
-                      message: `Alles korrekt! ${count} Benutzer gefunden.${samples.length ? ` Beispiele: ${samples.join(", ")}` : ""}`,
-                      entries: count,
-                    });
+                    done({ ok: true, message: `OK! Filter "(objectClass=user)" funktioniert. ${count} Benutzer.${samples.length ? ` z.B.: ${samples.join(", ")}` : ""} → Trage "(objectClass=user)" als User-Filter ein.`, entries: count });
                   }
                 });
               });
+              return;
+            }
+
+            let count = 0;
+            const samples: string[] = [];
+            res.on("searchEntry", (entry) => {
+              count++;
+              const get = (a: string) =>
+                (entry.pojo?.attributes as { type: string; values: string[] }[] | undefined)
+                  ?.find((x) => x.type === a)?.values?.[0] ?? "";
+              const name = get("displayName") || get("cn");
+              if (name && samples.length < 3) samples.push(name);
+            });
+            res.on("error", (e: Error) => done({ ok: false, message: `Suche Fehler: ${e.message}` }));
+            res.on("end", () => {
+              if (count === 0) {
+                done({ ok: false, message: `Bind OK ✓ — Keine Einträge mit Filter "${filter}". Tipp: Versuche "(objectClass=user)" für Active Directory.` });
+              } else {
+                done({ ok: true, message: `Alles korrekt! ${count} Benutzer gefunden.${samples.length ? ` z.B.: ${samples.join(", ")}` : ""}`, entries: count });
+              }
             });
           });
         });
