@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Topbar } from "@/components/layout/Topbar";
+import { TitleSetter } from "@/components/layout/TitleSetter";
 import { isEnterprise, isFullSetup } from "@/lib/features";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -81,7 +82,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         isFullSetup={isFullSetup}
       />
       <div className="flex flex-1 flex-col overflow-hidden">
-        <Topbar session={session} avatarSrc={avatarSrc} notifications={notifications} siteTitle={appSettings?.siteTitle} />
+        <TitleSetter siteTitle={appSettings?.siteTitle} />
+        <Topbar session={session} avatarSrc={avatarSrc} notifications={notifications} />
         <main className="flex-1 overflow-auto p-6">{children}</main>
         <footer className="shrink-0 border-t border-border px-6 py-2 text-center text-xs text-muted-foreground">
           KanbanFlow &middot; powered by{" "}

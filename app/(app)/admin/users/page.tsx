@@ -10,6 +10,7 @@ import { SmtpSettings } from "@/components/admin/SmtpSettings";
 import { ExchangeConfigPanel } from "@/components/admin/ExchangeConfigPanel";
 import { HelpdeskAdminPanel } from "@/components/admin/HelpdeskAdminPanel";
 import { LdapConfigPanel } from "@/components/admin/LdapConfigPanel";
+import { PortalUsersPanel } from "@/components/admin/PortalUsersPanel";
 import { isFullSetup } from "@/lib/features";
 import { Users, Clock, CheckCircle2, Ban } from "lucide-react";
 
@@ -19,11 +20,11 @@ export default async function AdminUsersPage() {
 
   const currentUser = await prisma.user.findUnique({
     where: { id: session.userId },
-    select: { isAdmin: true, organizationId: true },
+    select: { isAdmin: true, organizationId: true, organization: { select: { slug: true } } },
   });
   if (!currentUser?.isAdmin) notFound();
 
-  const [users, appSettings, exchangeConfig, teams, categories, ldapConfig] = await Promise.all([
+  const [users, appSettings, exchangeConfig, teams, categories, ldapConfig, portalUsers] = await Promise.all([
     prisma.user.findMany({
       where: { organizationId: currentUser.organizationId },
       orderBy: [{ status: "asc" }, { createdAt: "desc" }],
@@ -42,6 +43,13 @@ export default async function AdminUsersPage() {
     isFullSetup
       ? prisma.ldapConfig.findUnique({ where: { organizationId: currentUser.organizationId! } })
       : Promise.resolve(null),
+    isFullSetup
+      ? prisma.portalUser.findMany({
+          where: { organizationId: currentUser.organizationId! },
+          include: { contact: { select: { name: true } } },
+          orderBy: { createdAt: "desc" },
+        })
+      : Promise.resolve([]),
   ]);
 
   const pending   = users.filter((u) => u.status === "PENDING").length;
@@ -94,6 +102,9 @@ export default async function AdminUsersPage() {
         smtpSecure: appSettings?.smtpSecure ?? false,
       }} />
       {isFullSetup && <HelpdeskAdminPanel teams={teams} categories={categories} />}
+      {isFullSetup && currentUser.organization?.slug && (
+        <PortalUsersPanel users={portalUsers} orgSlug={currentUser.organization.slug} />
+      )}
       {isFullSetup && (
         <LdapConfigPanel initial={ldapConfig ? {
           host: ldapConfig.host, port: ldapConfig.port, bindDn: ldapConfig.bindDn,

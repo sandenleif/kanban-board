@@ -91,6 +91,7 @@ model Organization {
   ticketTeams       TicketTeam[]
   ticketCategories  TicketCategory[]
   ticketContacts    TicketContact[]
+  portalUsers       PortalUser[]
   tickets           Ticket[]
   exchangeConfig    ExchangeConfig?
   ldapConfig        LdapConfig?
@@ -527,10 +528,30 @@ model TicketContact {
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   tickets      Ticket[]
+  portalUsers  PortalUser[]
 
   @@unique([organizationId, email])
   @@index([organizationId, source])
   @@map("ticket_contacts")
+}
+
+model PortalUser {
+  id             String   @id @default(cuid())
+  organizationId String
+  contactId      String?
+  name           String
+  email          String
+  passwordHash   String?
+  ldapUsername   String?
+  status         String   @default("ACTIVE")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contact      TicketContact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  @@unique([organizationId, email])
+  @@map("portal_users")
 }
 
 // ── Password Reset ─────────────────────────────────────────────────────────
