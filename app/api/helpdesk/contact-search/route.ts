@@ -2,8 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-// Search for contacts in Exchange-synced data via Elasticsearch
-// Falls back to returning users from the org if no ES
 export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json([], { status: 401 });
@@ -17,50 +15,40 @@ export async function GET(req: NextRequest) {
   });
   if (!user?.organizationId) return NextResponse.json([]);
 
-  // When Elasticsearch is configured: search indexed AD/Exchange contacts
-  const esUrl = process.env.ELASTICSEARCH_URL;
-  if (esUrl) {
-    try {
-      const res = await fetch(`${esUrl}/kanban_contacts/_search`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          size: 10,
-          query: {
-            bool: {
-              must: [
-                { term: { organizationId: user.organizationId } },
-                { multi_match: { query: q, fields: ["name^2", "email"], fuzziness: "AUTO" } },
-              ],
-            },
-          },
-        }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const hits = data.hits?.hits ?? [];
-        if (hits.length > 0) {
-          return NextResponse.json(
-            hits.map((h: { _source: { name: string; email: string } }) => ({
-              name: h._source.name,
-              email: h._source.email,
-              source: "ad",
-            }))
-          );
-        }
-      }
-    } catch {
-      // Fall through to org user search
-    }
+  // 1. Direct LDAP search (if configured) — no Elasticsearch needed
+  const ldapConfig = await prisma.ldapConfig.findUnique({
+    where: { organizationId: user.organizationId },
+    select: { host: true, port: true, bindDn: true, bindPassword: true, baseDn: true, userFilter: true, enabled: true },
+  });
+
+  if (ldapConfig?.enabled) {
+    const ldapResults = await searchLdap(ldapConfig, q);
+    if (ldapResults.length > 0) return NextResponse.json(ldapResults);
   }
 
-  // Fallback: search org users
+  // 2. Search saved contacts
+  const contacts = await prisma.ticketContact.findMany({
+    where: {
+      organizationId: user.organizationId,
+      OR: [
+        { name:  { contains: q, mode: "insensitive" } },
+        { email: { contains: q, mode: "insensitive" } },
+      ],
+    },
+    select: { name: true, email: true, source: true },
+    take: 10,
+  });
+  if (contacts.length > 0) {
+    return NextResponse.json(contacts.map((c) => ({ name: c.name, email: c.email ?? "", source: c.source })));
+  }
+
+  // 3. Fallback: org users
   const users = await prisma.user.findMany({
     where: {
       organizationId: user.organizationId,
       status: "ACTIVE",
       OR: [
-        { name: { contains: q, mode: "insensitive" } },
+        { name:  { contains: q, mode: "insensitive" } },
         { email: { contains: q, mode: "insensitive" } },
       ],
     },
@@ -68,7 +56,52 @@ export async function GET(req: NextRequest) {
     take: 10,
   });
 
-  return NextResponse.json(
-    users.map((u) => ({ name: u.name, email: u.email, source: "manual" as const }))
-  );
+  return NextResponse.json(users.map((u) => ({ name: u.name, email: u.email, source: "manual" })));
+}
+
+async function searchLdap(
+  config: { host: string; port: number; bindDn: string; bindPassword: string; baseDn: string; userFilter: string },
+  q: string
+): Promise<{ name: string; email: string; source: string }[]> {
+  try {
+    const ldap = await import("ldapjs").catch(() => null);
+    if (!ldap) return [];
+
+    return await new Promise((resolve) => {
+      const client = ldap.createClient({ url: `ldap://${config.host}:${config.port}`, timeout: 4000, connectTimeout: 4000 });
+      client.on("error", () => resolve([]));
+
+      client.bind(config.bindDn, config.bindPassword, (err) => {
+        if (err) { client.destroy(); resolve([]); return; }
+
+        const escaped = q.replace(/[*()\\]/g, "\\$&");
+        const filter = `(&${config.userFilter}(|(cn=*${escaped}*)(mail=*${escaped}*)(displayName=*${escaped}*)(sn=*${escaped}*)))`;
+
+        client.search(config.baseDn, {
+          filter,
+          scope: "sub",
+          attributes: ["cn", "displayName", "mail", "sn", "givenName"],
+          sizeLimit: 10,
+        }, (err2, res) => {
+          if (err2) { client.destroy(); resolve([]); return; }
+
+          const results: { name: string; email: string; source: string }[] = [];
+
+          res.on("searchEntry", (entry) => {
+            const get = (attr: string) =>
+              entry.pojo?.attributes?.find((a: { type: string; values: string[] }) => a.type === attr)?.values?.[0] ?? "";
+
+            const name = get("displayName") || get("cn") || `${get("givenName")} ${get("sn")}`.trim();
+            const email = get("mail");
+            if (name && email) results.push({ name, email, source: "ad" });
+          });
+
+          res.on("end", () => { client.destroy(); resolve(results); });
+          res.on("error", () => { client.destroy(); resolve(results); });
+        });
+      });
+    });
+  } catch {
+    return [];
+  }
 }
