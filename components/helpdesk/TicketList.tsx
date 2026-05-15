@@ -24,12 +24,13 @@ type TicketRow = {
   _count: { comments: number };
 };
 
-type Queue   = { id: string; name: string };
-type Team    = { id: string; name: string };
-type OrgUser = { id: string; name: string };
+type Queue    = { id: string; name: string };
+type Team     = { id: string; name: string };
+type Category = { id: string; name: string };
+type OrgUser  = { id: string; name: string };
 
 interface Filters {
-  status?: string; priority?: string; queue?: string; team?: string;
+  status?: string; priority?: string; queue?: string; team?: string; category?: string;
   topic?: string; inventoryNumber?: string; requesterType?: string; q?: string;
 }
 
@@ -37,6 +38,7 @@ interface Props {
   tickets: TicketRow[];
   queues: Queue[];
   teams: Team[];
+  categories: Category[];
   orgUsers: OrgUser[];
   currentFilters: Filters;
   isAdmin: boolean;
@@ -54,7 +56,7 @@ const STATUSES = [
   { value: "CLOSED",      label: "Geschlossen" },
 ];
 
-export function TicketList({ tickets, queues, teams, currentFilters, totalCount, page, limit }: Props) {
+export function TicketList({ tickets, queues, teams, categories, currentFilters, totalCount, page, limit }: Props) {
   const router = useRouter();
   const [search, setSearch]       = useState(currentFilters.q ?? "");
   const [topicF, setTopicF]       = useState(currentFilters.topic ?? "");
@@ -63,7 +65,7 @@ export function TicketList({ tickets, queues, teams, currentFilters, totalCount,
   const totalPages = Math.max(1, Math.ceil(totalCount / limit));
 
   const hasActiveFilter = !!(
-    currentFilters.status || currentFilters.queue || currentFilters.team ||
+    currentFilters.status || currentFilters.queue || currentFilters.team || currentFilters.category ||
     currentFilters.topic  || currentFilters.inventoryNumber || currentFilters.requesterType || currentFilters.q
   );
 
@@ -73,6 +75,7 @@ export function TicketList({ tickets, queues, teams, currentFilters, totalCount,
       status: currentFilters.status,
       queue: currentFilters.queue,
       team: currentFilters.team,
+      category: currentFilters.category,
       topic: currentFilters.topic,
       inventoryNumber: currentFilters.inventoryNumber,
       requesterType: currentFilters.requesterType,
@@ -117,6 +120,13 @@ export function TicketList({ tickets, queues, teams, currentFilters, totalCount,
               value={currentFilters.team ?? ""} onChange={(e) => applyFilter("team", e.target.value)}>
               <option value="">Alle Teams</option>
               {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          )}
+          {categories.length > 0 && (
+            <select aria-label="Kategorie" className="h-8 rounded-md border border-border bg-background text-xs px-2"
+              value={currentFilters.category ?? ""} onChange={(e) => applyFilter("category", e.target.value)}>
+              <option value="">Alle Kategorien</option>
+              {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           )}
 

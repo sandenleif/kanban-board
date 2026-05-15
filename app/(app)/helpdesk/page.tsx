@@ -14,12 +14,12 @@ import { EmailCheckButton } from "@/components/helpdesk/EmailCheckButton";
 export default async function HelpdeskPage({
   searchParams,
 }: {
-  searchParams: Promise<{ view?: string; status?: string; priority?: string; queue?: string; team?: string; topic?: string; inventoryNumber?: string; requesterType?: string; q?: string; page?: string }>;
+  searchParams: Promise<{ view?: string; status?: string; priority?: string; queue?: string; team?: string; category?: string; topic?: string; inventoryNumber?: string; requesterType?: string; q?: string; page?: string }>;
 }) {
   if (!isFullSetup) notFound();
 
   const session = await requireSession();
-  const { view, status, priority, queue, team, topic, inventoryNumber, requesterType, q, page } = await searchParams;
+  const { view, status, priority, queue, team, category, topic, inventoryNumber, requesterType, q, page } = await searchParams;
 
   const user = await prisma.user.findUnique({
     where: { id: session.userId },
@@ -32,9 +32,10 @@ export default async function HelpdeskPage({
   const pageNum = Math.max(1, parseInt(page ?? "1"));
   const isListView = view === "list";
 
-  const [queues, teams, exchangeConfig, orgUsers, stats] = await Promise.all([
+  const [queues, teams, categories, exchangeConfig, orgUsers, stats] = await Promise.all([
     prisma.ticketQueue.findMany({ where: { organizationId: orgId }, orderBy: { position: "asc" } }),
     prisma.ticketTeam.findMany({ where: { organizationId: orgId }, orderBy: { position: "asc" } }),
+    prisma.ticketCategory.findMany({ where: { organizationId: orgId }, orderBy: { position: "asc" } }),
     prisma.exchangeConfig.findUnique({ where: { organizationId: orgId }, select: { enabled: true, lastCheckedAt: true } }),
     prisma.user.findMany({ where: { organizationId: orgId, status: "ACTIVE" }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
     prisma.ticket.groupBy({ by: ["status"], where: { organizationId: orgId }, _count: { id: true } }),
@@ -76,6 +77,7 @@ export default async function HelpdeskPage({
     ...(priority ? { priority: priority as never } : {}),
     ...(queue ? { queueId: queue } : {}),
     ...(team ? { teamId: team } : {}),
+    ...(category ? { categoryId: category } : {}),
     ...(topic ? { topic: { contains: topic, mode: "insensitive" as const } } : {}),
     ...(inventoryNumber ? { inventoryNumber: { contains: inventoryNumber, mode: "insensitive" as const } } : {}),
     ...(requesterType ? { requesterType } : {}),
@@ -146,8 +148,9 @@ export default async function HelpdeskPage({
           tickets={tickets}
           queues={queues}
           teams={teams}
+          categories={categories}
           orgUsers={orgUsers}
-          currentFilters={{ status, priority, queue, team, topic, inventoryNumber, requesterType, q }}
+          currentFilters={{ status, priority, queue, team, category, topic, inventoryNumber, requesterType, q }}
           isAdmin={user.isAdmin}
           totalCount={totalTickets}
           page={pageNum}
