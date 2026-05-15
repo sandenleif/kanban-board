@@ -10,7 +10,7 @@
 .PARAMETER ServerUrl
     URL des KanbanFlow-Servers (z.B. http://172.29.13.134:3000)
 .PARAMETER EnrollmentToken
-    Enrollment-Token aus Admin → Software (einmalig fuer alle PCs gleich)
+    Enrollment-Token aus Admin -> Software (einmalig fuer alle PCs gleich)
 .EXAMPLE
     # Erstkonfiguration (als Administrator ausfuehren):
     .\agent.ps1 -Setup -ServerUrl "http://172.29.13.134:3000" -EnrollmentToken "abc123..."
@@ -31,7 +31,7 @@ $TaskName     = "KanbanFlow-Agent"
 $LogFile      = "$env:ProgramData\KanbanFlow\agent.log"
 $TempDir      = "$env:TEMP\KanbanFlow"
 
-# ── Logging ───────────────────────────────────────────────────────────────────
+# -- Logging -------------------------------------------------------------------
 
 function Write-Log {
     param([string]$Message, [string]$Level = "INFO")
@@ -45,7 +45,7 @@ function Write-Log {
     } catch {}
 }
 
-# ── Registry helpers ──────────────────────────────────────────────────────────
+# -- Registry helpers ----------------------------------------------------------
 
 function Save-Config {
     param([string]$Url, [string]$Key)
@@ -63,7 +63,7 @@ function Load-Config {
     return @{ ServerUrl = $url; ApiKey = $key }
 }
 
-# ── Hardware-Inventar sammeln ─────────────────────────────────────────────────
+# -- Hardware-Inventar sammeln -------------------------------------------------
 
 function Get-HardwareInfo {
     $hw = @{ hostname = $env:COMPUTERNAME.ToLower() }
@@ -122,7 +122,7 @@ function Get-HardwareInfo {
     return $hw
 }
 
-# ── Selbst-Registrierung am Server ───────────────────────────────────────────
+# -- Selbst-Registrierung am Server -------------------------------------------
 
 function Register-Agent {
     param([string]$ServerUrl, [string]$Token)
@@ -151,7 +151,7 @@ function Register-Agent {
     return $response.apiKey
 }
 
-# ── Scheduled Task einrichten ─────────────────────────────────────────────────
+# -- Scheduled Task einrichten -------------------------------------------------
 
 function Install-ScheduledTask {
     param([string]$ScriptPath)
@@ -187,7 +187,7 @@ function Install-ScheduledTask {
     Write-Log "Scheduled Task '$TaskName' eingerichtet (alle 5 Minuten als SYSTEM)."
 }
 
-# ── Job-Ausfuehrung ───────────────────────────────────────────────────────────
+# -- Job-Ausfuehrung -----------------------------------------------------------
 
 function Invoke-Job {
     param([hashtable]$Job, [string]$ServerUrl, [string]$ApiKey)
@@ -240,7 +240,7 @@ function Invoke-Job {
     return @{ exitCode = $exitCode; log = $log.ToString() }
 }
 
-# ── Haupt-Polling-Loop ────────────────────────────────────────────────────────
+# -- Haupt-Polling-Loop --------------------------------------------------------
 
 function Start-AgentLoop {
     param([string]$ServerUrl, [string]$ApiKey)
@@ -288,7 +288,7 @@ function Start-AgentLoop {
     }
 }
 
-# ── Einstiegspunkt ────────────────────────────────────────────────────────────
+# -- Einstiegspunkt ------------------------------------------------------------
 
 if ($Setup) {
     if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
@@ -298,7 +298,7 @@ if ($Setup) {
     }
 
     if (-not $ServerUrl)       { $ServerUrl       = Read-Host "Server-URL (z.B. http://172.29.13.134:3000)" }
-    if (-not $EnrollmentToken) { $EnrollmentToken = Read-Host "Enrollment-Token (aus Admin → Software)" }
+    if (-not $EnrollmentToken) { $EnrollmentToken = Read-Host "Enrollment-Token (aus Admin -> Software)" }
 
     $ServerUrl = $ServerUrl.TrimEnd("/")
 
@@ -315,7 +315,7 @@ if ($Setup) {
     Install-ScheduledTask -ScriptPath $installPath
 
     Write-Host ""
-    Write-Host "✓ Agent erfolgreich eingerichtet!" -ForegroundColor Green
+    Write-Host "[OK] Agent erfolgreich eingerichtet!" -ForegroundColor Green
     Write-Host "  Script:  $installPath"
     Write-Host "  Logs:    $LogFile"
     Write-Host "  Task:    $TaskName (alle 5 Minuten als SYSTEM)"
