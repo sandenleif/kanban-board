@@ -78,7 +78,8 @@ export async function POST(req: NextRequest) {
   const job = await prisma.softwareJob.findFirst({
     where: { id: jobId, agentId: agent.id },
   });
-  if (!job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
+  // Accept result even if job was already marked complete (agent retry after network failure)
+  if (!job) return NextResponse.json({ ok: true, skipped: true });
 
   await prisma.softwareJob.update({
     where: { id: jobId },
