@@ -16,6 +16,7 @@ import {
   updateTicketAction, deleteTicketAction, addTicketCommentAction,
   convertTicketToTaskAction, lockTicketAction, unlockTicketAction,
 } from "@/actions/ticket";
+import { updateContactAction } from "@/actions/contact";
 import { formatDate, getInitials, ticketAge } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -58,6 +59,15 @@ export function TicketDetail({ ticket, queues, teams, orgUsers, allWorkspaces, c
   const [convertProject, setConvertProject] = useState("");
   const [isInternal, setIsInternal] = useState(false);
   const [commentState, commentAction, commentPending] = useActionState(addTicketCommentAction, {});
+  const [contactPhone, setContactPhone] = useState(ticket.contact?.phone ?? "");
+
+  const saveContactPhone = (val: string) => {
+    if (!ticket.contact?.id || val === (ticket.contact.phone ?? "")) return;
+    startTransition(async () => {
+      await updateContactAction(ticket.contact!.id, { phone: val || undefined });
+      toast.success("Telefonnummer gespeichert");
+    });
+  };
 
   const update = (data: Parameters<typeof updateTicketAction>[1]) => {
     startTransition(async () => {
@@ -360,13 +370,21 @@ export function TicketDetail({ ticket, queues, teams, orgUsers, allWorkspaces, c
                     </a>
                   </div>
                 )}
-                {/* Telefon */}
-                {ticket.contact?.phone && (
+                {/* Telefon — editierbar */}
+                {ticket.contact?.id && (
                   <div className="flex items-start gap-2">
-                    <Phone className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
-                    <a href={`tel:${ticket.contact.phone}`} className="text-foreground hover:underline">
-                      {ticket.contact.phone}
-                    </a>
+                    <Phone className="h-3.5 w-3.5 text-muted-foreground mt-1.5 shrink-0" />
+                    <input
+                      className="flex-1 h-6 rounded border border-transparent hover:border-border focus:border-border bg-transparent focus:bg-background text-foreground text-xs px-1.5 transition-colors outline-none"
+                      value={contactPhone}
+                      onChange={(e) => setContactPhone(e.target.value)}
+                      onBlur={(e) => saveContactPhone(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+                      placeholder="Telefonnummer…"
+                    />
+                    {contactPhone && (
+                      <a href={`tel:${contactPhone}`} className="text-primary hover:underline text-xs mt-0.5 shrink-0">↗</a>
+                    )}
                   </div>
                 )}
                 {/* Firma */}
