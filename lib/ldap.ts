@@ -38,10 +38,21 @@ export async function ldapAuthenticate(
     const useLoginBase = options?.useLoginBaseDn ?? true;
     const searchBase = (useLoginBase && config.loginBaseDn?.trim()) ? config.loginBaseDn.trim() : config.baseDn;
 
-    // Build search filter: by email/UPN or by sAMAccountName
-    const idFilter = isEmail
-      ? `(|(mail=${identifier})(userPrincipalName=${identifier}))`
-      : `(sAMAccountName=${identifier})`;
+    // Build search filter: by email/UPN or by sAMAccountName.
+    // For sAMAccountName: also try with German umlauts transliterated
+    // (AD stores "johannes.boehmler" but user may type "johannes.böhmler")
+    let idFilter: string;
+    if (isEmail) {
+      idFilter = `(|(mail=${identifier})(userPrincipalName=${identifier}))`;
+    } else {
+      const transliterated = identifier
+        .replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue")
+        .replace(/Ä/g, "Ae").replace(/Ö/g, "Oe").replace(/Ü/g, "Ue")
+        .replace(/ß/g, "ss");
+      idFilter = transliterated !== identifier
+        ? `(|(sAMAccountName=${identifier})(sAMAccountName=${transliterated}))`
+        : `(sAMAccountName=${identifier})`;
+    }
     const filter = `(&${config.userFilter}${idFilter})`;
 
     return await new Promise((resolve) => {
