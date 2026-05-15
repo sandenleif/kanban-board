@@ -23,7 +23,7 @@ export default async function NewTicketPage() {
   ]);
 
   return (
-    <div className="max-w-2xl mx-auto animate-in">
+    <div className="max-w-4xl mx-auto animate-in">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-semibold text-foreground">Neues Ticket</h1>
       </div>

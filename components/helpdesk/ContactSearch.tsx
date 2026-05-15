@@ -29,13 +29,26 @@ async function searchContacts(q: string): Promise<Contact[]> {
   }
 }
 
+export interface SelectedContactData {
+  id?: string;
+  name: string;
+  email: string;
+  phone: string;
+  mobile: string;
+  department: string;
+  company: string;
+  title: string;
+  source: "ad" | "manual";
+}
+
 interface Props {
   hasElastic?: boolean;
   ticketId?: string;
   onContactCreated?: (id: string, name: string, email: string) => void;
+  onContactSelected?: (contact: SelectedContactData | null) => void;
 }
 
-export function ContactSearch({ hasElastic = false, ticketId, onContactCreated }: Props) {
+export function ContactSearch({ hasElastic = false, ticketId, onContactCreated, onContactSelected }: Props) {
   const [name, setName]             = useState("");
   const [email, setEmail]           = useState("");
   const [contactId, setContactId]   = useState("");
@@ -63,6 +76,7 @@ export function ContactSearch({ hasElastic = false, ticketId, onContactCreated }
 
   const handleQueryChange = (v: string) => {
     setQuery(v); setName(v); setFromAd(false); setContactId("");
+    if (!v.trim()) onContactSelected?.(null);
     clearTimeout(timerRef.current);
     if (v.length >= 2) {
       setLoading(true); setShowDrop(true);
@@ -78,6 +92,9 @@ export function ContactSearch({ hasElastic = false, ticketId, onContactCreated }
   const selectContact = (c: Contact) => {
     setName(c.name); setEmail(c.email); setQuery(c.name);
     setFromAd(c.source === "ad"); setShowDrop(false);
+
+    // Notify parent immediately with all available data
+    onContactSelected?.({ name: c.name, email: c.email, phone: c.phone, mobile: c.mobile, department: c.department, company: c.company, title: c.title, source: c.source });
 
     // Auto-save AD contact with all available fields to local DB
     if (c.source === "ad" && c.email) {
@@ -98,6 +115,7 @@ export function ContactSearch({ hasElastic = false, ticketId, onContactCreated }
         if (r.id) {
           setContactId(r.id);
           onContactCreated?.(r.id, c.name, c.email);
+          onContactSelected?.({ name: c.name, email: c.email, phone: c.phone, mobile: c.mobile, department: c.department, company: c.company, title: c.title, source: c.source, id: r.id });
         }
       });
     }
@@ -120,7 +138,8 @@ export function ContactSearch({ hasElastic = false, ticketId, onContactCreated }
       setShowCreate(false);
       if (r.id) {
         setContactId(r.id);
-        onContactCreated?.(r.id!, name, email);
+        onContactCreated?.(r.id, name, email);
+        onContactSelected?.({ id: r.id, name, email, phone: createData.phone, mobile: "", department: createData.department, company: createData.company, title: "", source: "manual" });
       }
     });
   };
