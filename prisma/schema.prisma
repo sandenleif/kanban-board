@@ -95,6 +95,11 @@ model Organization {
   tickets           Ticket[]
   exchangeConfig    ExchangeConfig?
   ldapConfig        LdapConfig?
+  assetCategories   AssetCategory[]
+  assetLocations    AssetLocation[]
+  assets            Asset[]
+  softwarePackages  SoftwarePackage[]
+  softwareAgents    SoftwareAgent[]
 
   @@map("organizations")
 }
@@ -151,6 +156,8 @@ model User {
   assignedTickets     Ticket[]             @relation("TicketAssignee")
   lockedTickets       Ticket[]             @relation("TicketLocker")
   ticketComments      TicketComment[]
+  assignedAssets      Asset[]              @relation("AssetAssignee")
+  assetAssignments    AssetAssignment[]    @relation("AssetAssignmentUser")
 
   @@map("users")
 }
@@ -559,6 +566,162 @@ model PortalUser {
 
   @@unique([organizationId, email])
   @@map("portal_users")
+}
+
+// ── Inventory ─────────────────────────────────────────────────────────────
+
+enum AssetStatus {
+  ACTIVE
+  MAINTENANCE
+  RETIRED
+  LOST
+  RESERVED
+}
+
+model AssetCategory {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  icon           String?
+  position       Int      @default(0)
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assets       Asset[]
+
+  @@map("asset_categories")
+}
+
+model AssetLocation {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  building       String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assets       Asset[]
+
+  @@map("asset_locations")
+}
+
+model Asset {
+  id              String      @id @default(cuid())
+  organizationId  String
+  categoryId      String?
+  locationId      String?
+  assignedToId    String?
+  name            String
+  inventoryNumber String?
+  serialNumber    String?
+  manufacturer    String?
+  model           String?
+  purchaseDate    DateTime?
+  warrantyUntil   DateTime?
+  purchasePrice   Decimal?    @db.Decimal(10, 2)
+  status          AssetStatus @default(ACTIVE)
+  notes           String?     @db.Text
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  category     AssetCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  location     AssetLocation? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  assignedTo   User?          @relation("AssetAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  assignments  AssetAssignment[]
+
+  @@index([organizationId, status])
+  @@index([organizationId, categoryId])
+  @@index([organizationId, assignedToId])
+  @@index([inventoryNumber])
+  @@map("assets")
+}
+
+model AssetAssignment {
+  id         String    @id @default(cuid())
+  assetId    String
+  userId     String
+  assignedAt DateTime  @default(now())
+  returnedAt DateTime?
+  notes      String?
+
+  asset Asset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  user  User  @relation("AssetAssignmentUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([assetId])
+  @@index([userId])
+  @@map("asset_assignments")
+}
+
+// ── Software Distribution ──────────────────────────────────────────────────
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  SUCCESS
+  FAILED
+  CANCELLED
+}
+
+model SoftwarePackage {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  description    String?  @db.Text
+  version        String?
+  type           String   @default("winget")  // "winget" | "file" | "script"
+  wingetId       String?
+  fileName       String?
+  fileData       String?  @db.Text  // base64, max ~25 MB
+  fileMimeType   String?
+  installParams  String?
+  uninstallParams String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  jobs         SoftwareJob[]
+
+  @@index([organizationId])
+  @@map("software_packages")
+}
+
+model SoftwareAgent {
+  id             String    @id @default(cuid())
+  organizationId String
+  hostname       String
+  ipAddress      String?
+  osVersion      String?
+  apiKey         String    @unique @default(cuid())
+  lastSeenAt     DateTime?
+  createdAt      DateTime  @default(now())
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  jobs         SoftwareJob[]
+
+  @@unique([organizationId, hostname])
+  @@index([organizationId])
+  @@map("software_agents")
+}
+
+model SoftwareJob {
+  id          String    @id @default(cuid())
+  packageId   String
+  agentId     String
+  status      JobStatus @default(PENDING)
+  exitCode    Int?
+  log         String?   @db.Text
+  scheduledAt DateTime?
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  package SoftwarePackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  agent   SoftwareAgent   @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([agentId, status])
+  @@index([packageId])
+  @@map("software_jobs")
 }
 
 // ── Password Reset ─────────────────────────────────────────────────────────
