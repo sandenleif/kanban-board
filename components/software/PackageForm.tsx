@@ -56,7 +56,7 @@ export function PackageForm() {
 
         {type === "file" && (
           <div className="space-y-1.5 col-span-2">
-            <Label htmlFor="file">EXE / MSI Datei (max. 25 MB)</Label>
+            <Label htmlFor="file">EXE / MSI Datei (max. 512 MB)</Label>
             <Input id="file" name="file" type="file" accept=".exe,.msi,.msp,.msu" />
           </div>
         )}

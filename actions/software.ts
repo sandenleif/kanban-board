@@ -35,7 +35,7 @@ export async function createPackageAction(
   if (type === "file") {
     const file = formData.get("file") as File | null;
     if (file && file.size > 0) {
-      if (file.size > 25 * 1024 * 1024) return { error: "Datei zu groß (max. 25 MB)" };
+      if (file.size > 512 * 1024 * 1024) return { error: "Datei zu groß (max. 512 MB)" };
       const buffer = Buffer.from(await file.arrayBuffer());
       fileData = buffer.toString("base64");
       fileName = file.name;
