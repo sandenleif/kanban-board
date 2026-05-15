@@ -3,9 +3,11 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Play, Trash2, CheckCircle2, XCircle, Clock, Loader2, Package, X } from "lucide-react";
+import { ArrowLeft, Play, Trash2, CheckCircle2, XCircle, Clock, Loader2, Package, X, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { createJobAction, cancelJobAction, deletePackageAction } from "@/actions/software";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { createJobAction, cancelJobAction, deletePackageAction, updatePackageAction } from "@/actions/software";
 import { toast } from "sonner";
 import type { JobStatus } from "@prisma/client";
 
@@ -31,6 +33,14 @@ export function PackageDetail({ pkg, agents, jobs, isAdmin }: {
   const [isPending, startTransition] = useTransition();
   const [selectedAgents, setSelectedAgents] = useState<Set<string>>(new Set());
   const [showDeploy, setShowDeploy] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editData, setEditData] = useState({
+    name:           pkg.name,
+    version:        pkg.version ?? "",
+    wingetId:       pkg.wingetId ?? "",
+    installParams:  pkg.installParams ?? "",
+    description:    pkg.description ?? "",
+  });
 
   const toggleAgent = (id: string) =>
     setSelectedAgents((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -43,6 +53,22 @@ export function PackageDetail({ pkg, agents, jobs, isAdmin }: {
       toast.success(`${selectedAgents.size} Job(s) erstellt`);
       setSelectedAgents(new Set());
       setShowDeploy(false);
+      router.refresh();
+    });
+  };
+
+  const handleSave = () => {
+    startTransition(async () => {
+      const r = await updatePackageAction(pkg.id, {
+        name:           editData.name.trim() || undefined,
+        version:        editData.version.trim() || null,
+        wingetId:       editData.wingetId.trim() || null,
+        installParams:  editData.installParams.trim() || null,
+        description:    editData.description.trim() || null,
+      });
+      if (r.error) { toast.error(r.error); return; }
+      toast.success("Gespeichert");
+      setEditing(false);
       router.refresh();
     });
   };
@@ -83,6 +109,9 @@ export function PackageDetail({ pkg, agents, jobs, isAdmin }: {
             <Button size="sm" onClick={() => setShowDeploy(true)}>
               <Play className="h-3.5 w-3.5" /> Ausrollen
             </Button>
+            <Button size="sm" variant="outline" onClick={() => setEditing(true)} disabled={editing}>
+              <Pencil className="h-3.5 w-3.5" /> Bearbeiten
+            </Button>
             <Button size="sm" variant="ghost" onClick={handleDelete} disabled={isPending}>
               <Trash2 className="h-3.5 w-3.5 text-destructive" />
             </Button>
@@ -90,10 +119,54 @@ export function PackageDetail({ pkg, agents, jobs, isAdmin }: {
         )}
       </div>
 
-      {/* Package info */}
-      <div className="rounded-xl border border-border bg-card p-5 text-xs space-y-2">
-        {pkg.wingetId && <p><span className="text-muted-foreground w-32 inline-block">winget-ID</span><code className="font-mono">{pkg.wingetId}</code></p>}
-        {pkg.installParams && <p><span className="text-muted-foreground w-32 inline-block">Install-Parameter</span><code className="font-mono">{pkg.installParams}</code></p>}
+      {/* Package info / edit form */}
+      <div className="rounded-xl border border-border bg-card p-5 space-y-3">
+        {editing ? (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Name</label>
+                <Input value={editData.name} onChange={(e) => setEditData((d) => ({ ...d, name: e.target.value }))} className="h-8 text-xs" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Version</label>
+                <Input value={editData.version} onChange={(e) => setEditData((d) => ({ ...d, version: e.target.value }))} className="h-8 text-xs" placeholder="z.B. 1.0" />
+              </div>
+              {pkg.type === "winget" && (
+                <div className="space-y-1 col-span-2">
+                  <label className="text-xs text-muted-foreground">winget-ID</label>
+                  <Input value={editData.wingetId} onChange={(e) => setEditData((d) => ({ ...d, wingetId: e.target.value }))} className="h-8 text-xs font-mono" placeholder="z.B. Brave.Brave" />
+                </div>
+              )}
+              <div className="space-y-1 col-span-2">
+                <label className="text-xs text-muted-foreground">Installations-Parameter</label>
+                <Input value={editData.installParams} onChange={(e) => setEditData((d) => ({ ...d, installParams: e.target.value }))} className="h-8 text-xs font-mono" placeholder="z.B. --source winget --silent" />
+              </div>
+              <div className="space-y-1 col-span-2">
+                <label className="text-xs text-muted-foreground">Beschreibung</label>
+                <Textarea value={editData.description} onChange={(e) => setEditData((d) => ({ ...d, description: e.target.value }))} className="text-xs" rows={2} />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" onClick={handleSave} disabled={isPending}>
+                {isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                Speichern
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => { setEditing(false); setEditData({ name: pkg.name, version: pkg.version ?? "", wingetId: pkg.wingetId ?? "", installParams: pkg.installParams ?? "", description: pkg.description ?? "" }); }}>
+                Abbrechen
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="text-xs space-y-1.5">
+            {pkg.wingetId && <p><span className="text-muted-foreground w-32 inline-block">winget-ID</span><code className="font-mono">{pkg.wingetId}</code></p>}
+            {pkg.installParams && <p><span className="text-muted-foreground w-32 inline-block">Install-Parameter</span><code className="font-mono">{pkg.installParams}</code></p>}
+            {pkg.description && <p className="text-muted-foreground mt-1">{pkg.description}</p>}
+            {!pkg.wingetId && !pkg.installParams && !pkg.description && (
+              <p className="text-muted-foreground">Keine Details hinterlegt.</p>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Deploy modal */}
