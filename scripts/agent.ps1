@@ -281,7 +281,7 @@ function Start-AgentLoop {
 
         $body = @{ jobId = $job.jobId; exitCode = $result.exitCode; log = $result.log } | ConvertTo-Json
         try {
-            Invoke-RestMethod -Uri $baseUrl -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 30
+            Invoke-RestMethod -Uri $baseUrl -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 30 | Out-Null
         } catch {
             Write-Log "Ergebnis-Meldung fehlgeschlagen: $_" "WARN"
         }
