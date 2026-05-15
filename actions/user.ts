@@ -94,6 +94,7 @@ export async function updatePasswordAction(formData: FormData): Promise<ActionRe
   const user = await prisma.user.findUnique({ where: { id: session.userId } });
   if (!user) return { error: "User not found" };
 
+  if (!user.password) return { error: "Account uses AD login — no local password set" };
   const valid = await bcrypt.compare(currentPassword, user.password);
   if (!valid) return { error: "Current password is incorrect" };
 

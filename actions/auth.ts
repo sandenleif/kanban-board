@@ -10,6 +10,7 @@ import { generateSlug } from "@/lib/utils";
 import { loginSchema, registerSchema } from "@/lib/validations/auth";
 import { checkRateLimit } from "@/lib/ratelimit";
 import { isEnterprise } from "@/lib/enterprise";
+import { ldapAuthenticate } from "@/lib/ldap";
 import { sendEmail } from "@/lib/email";
 
 export type ActionResult = {
@@ -251,14 +252,58 @@ export async function loginAction(
   const parsed = loginSchema.safeParse(raw);
   if (!parsed.success) return { error: "Invalid email or password" };
 
-  const user = await prisma.user.findUnique({ where: { email: parsed.data.email } });
+  let user = await prisma.user.findUnique({ where: { email: parsed.data.email } });
 
+  // ── 1. Try local password (super admin / manually created accounts) ──────
   const dummyHash = "$2b$12$invalidhashfortimingattacknormalization0000000000000000";
-  const valid = user
+  const localValid = user?.password
     ? await bcrypt.compare(parsed.data.password, user.password)
     : await bcrypt.compare(parsed.data.password, dummyHash).then(() => false);
 
-  if (!user || !valid) return { error: "Invalid email or password" };
+  if (!localValid) {
+    // ── 2. Try LDAP ──────────────────────────────────────────────────────────
+    const org = await prisma.organization.findFirst({
+      include: { ldapConfig: true },
+    });
+
+    const ldapCfg = org?.ldapConfig?.enabled ? org.ldapConfig : null;
+
+    if (!ldapCfg) {
+      return { error: "Invalid email or password" };
+    }
+
+    const ldapUser = await ldapAuthenticate(ldapCfg, parsed.data.email, parsed.data.password);
+
+    if (!ldapUser) {
+      return { error: "Invalid email or password" };
+    }
+
+    // LDAP auth succeeded — auto-provision or update the local user record
+    if (user) {
+      // Update name from AD if it changed
+      if (user.name !== ldapUser.name && ldapUser.name) {
+        user = await prisma.user.update({
+          where: { id: user.id },
+          data: { name: ldapUser.name },
+        });
+      }
+    } else {
+      // New user — create with ACTIVE status (AD already handles authorization)
+      user = await prisma.user.create({
+        data: {
+          email: parsed.data.email,
+          name: ldapUser.name || parsed.data.email.split("@")[0],
+          password: null,
+          status: "ACTIVE",
+          isAdmin: false,
+          isSuperAdmin: false,
+          organizationId: org!.id,
+        },
+      });
+    }
+  }
+
+  if (!user) return { error: "Invalid email or password" };
 
   if (user.status === "SUSPENDED") {
     return { error: "Your account has been suspended. Contact an administrator." };

@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { createPortalSession, clearPortalSession, getPortalSession } from "@/lib/portal-auth";
 import { requireSession } from "@/lib/auth";
+import { ldapAuthenticate } from "@/lib/ldap";
 import { revalidatePath } from "next/cache";
 import type { ActionResult } from "./auth";
 
@@ -48,7 +49,7 @@ export async function portalLoginAction(
 
   // 2. Try LDAP login if configured
   if (org.ldapConfig?.enabled) {
-    const ldapResult = await tryLdapLogin(org.ldapConfig, email, password);
+    const ldapResult = await ldapAuthenticate(org.ldapConfig, email, password);
     if (ldapResult) {
       // Auto-create or update portal user from LDAP
       const upserted = await prisma.portalUser.upsert({
@@ -78,49 +79,6 @@ export async function portalLoginAction(
   return { error: "E-Mail oder Passwort falsch" };
 }
 
-async function tryLdapLogin(
-  config: { host: string; port: number; bindDn: string; bindPassword: string; baseDn: string; userFilter: string },
-  email: string,
-  password: string
-): Promise<{ name: string; username: string } | null> {
-  // Dynamically import ldapjs (server-side only)
-  try {
-    const ldap = await import("ldapjs").catch(() => null);
-    if (!ldap) return null;
-
-    return await new Promise((resolve) => {
-      const client = ldap.createClient({ url: `ldap://${config.host}:${config.port}`, timeout: 5000, referrals: false } as Parameters<typeof ldap.createClient>[0]);
-      client.on("error", () => resolve(null));
-
-      // First bind with service account to search for the user
-      client.bind(config.bindDn, config.bindPassword, (err) => {
-        if (err) { client.destroy(); resolve(null); return; }
-
-        const filter = `(&${config.userFilter}(|(mail=${email})(userPrincipalName=${email})))`;
-        client.search(config.baseDn, { filter, scope: "sub", attributes: ["dn", "cn", "mail", "sAMAccountName"] }, (err2, res) => {
-          if (err2) { client.destroy(); resolve(null); return; }
-
-          let userDn = ""; let userName = ""; let username = "";
-          res.on("searchEntry", (entry) => {
-            userDn = entry.dn.toString();
-            userName = (entry.pojo?.attributes?.find((a: { type: string }) => a.type === "cn")?.values?.[0]) ?? "";
-            username = (entry.pojo?.attributes?.find((a: { type: string }) => a.type === "sAMAccountName")?.values?.[0]) ?? email;
-          });
-          res.on("end", () => {
-            if (!userDn) { client.destroy(); resolve(null); return; }
-            // Bind as the found user to verify password
-            client.bind(userDn, password, (bindErr) => {
-              client.destroy();
-              resolve(bindErr ? null : { name: userName, username });
-            });
-          });
-        });
-      });
-    });
-  } catch {
-    return null;
-  }
-}
 
 export async function portalLogoutAction(orgSlug: string) {
   await clearPortalSession();
