@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import Link from "next/link";
 import { portalLogoutAction, createPortalTicketAction } from "@/actions/portal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -154,14 +155,15 @@ export function PortalDashboard({ session, orgSlug, orgName, logoSrc, tickets, c
         ) : (
           <div className="space-y-3">
             {tickets.map((t) => (
-              <div key={t.id} className="rounded-xl border border-border bg-card p-4 hover:border-primary/30 transition-colors">
+              <Link key={t.id} href={`/portal/${orgSlug}/tickets/${t.id}`}
+                className="block rounded-xl border border-border bg-card p-4 hover:border-primary/30 transition-colors cursor-pointer">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="font-mono text-xs text-muted-foreground">#{String(t.number).padStart(4, "0")}</span>
                       {t.category && <span className="text-xs bg-muted text-muted-foreground rounded px-1.5 py-0.5">{t.category.name}</span>}
                     </div>
-                    <p className="font-medium text-foreground">{t.title}</p>
+                    <p className="font-medium text-foreground group-hover:text-primary">{t.title}</p>
                     {t.queue && <p className="text-xs text-muted-foreground mt-0.5">{t.queue.name}</p>}
                   </div>
                   <div className="flex flex-col items-end gap-1.5 shrink-0">
@@ -176,7 +178,7 @@ export function PortalDashboard({ session, orgSlug, orgName, logoSrc, tickets, c
                     </div>
                   </div>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         )}

@@ -137,6 +137,40 @@ export async function createPortalTicketAction(
   return { success: true, ticketId: ticket.id };
 }
 
+// ── Portal: add comment on own ticket ────────────────────────────────────
+
+export async function addPortalCommentAction(
+  _prev: ActionResult,
+  formData: FormData
+): Promise<ActionResult> {
+  const session = await getPortalSession();
+  if (!session) return { error: "Nicht angemeldet" };
+
+  const ticketId = (formData.get("ticketId") as string)?.trim();
+  const content  = (formData.get("content") as string)?.trim();
+
+  if (!ticketId || !content) return { error: "Nachricht darf nicht leer sein" };
+
+  // Verify ticket belongs to this portal user
+  const ticket = await prisma.ticket.findFirst({
+    where: { id: ticketId, organizationId: session.organizationId, fromEmail: session.email },
+    select: { id: true, createdById: true },
+  });
+  if (!ticket) return { error: "Ticket nicht gefunden" };
+
+  await prisma.ticketComment.create({
+    data: {
+      ticketId,
+      authorId: ticket.createdById,
+      content,
+      isInternal: false,
+    },
+  });
+
+  revalidatePath(`/portal/${session.orgSlug}/tickets/${ticketId}`);
+  return { success: true };
+}
+
 // ── Admin: manage portal users ────────────────────────────────────────────
 
 export async function createPortalUserAction(data: {
