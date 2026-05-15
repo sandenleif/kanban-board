@@ -2,7 +2,11 @@
 // GET /api/agent/packages/[packageId]/download?apiKey=xxx
 
 import { NextRequest, NextResponse } from "next/server";
+import { readFile } from "fs/promises";
+import { join } from "path";
 import { prisma } from "@/lib/prisma";
+
+const UPLOAD_DIR = join(process.cwd(), "uploads", "packages");
 
 export async function GET(
   req: NextRequest,
@@ -22,11 +26,32 @@ export async function GET(
 
   if (!pkg?.fileData) return NextResponse.json({ error: "No file" }, { status: 404 });
 
+  const mime = pkg.fileMimeType ?? "application/octet-stream";
+  const name = pkg.fileName ?? "package";
+
+  // Filesystem-stored file (uploaded via /api/software/upload)
+  if (pkg.fileData.startsWith("__path__")) {
+    const relPath = pkg.fileData.slice("__path__".length);
+    try {
+      const buffer = await readFile(join(UPLOAD_DIR, relPath));
+      return new NextResponse(buffer, {
+        headers: {
+          "Content-Type": mime,
+          "Content-Disposition": `attachment; filename="${name}"`,
+          "Content-Length": String(buffer.length),
+        },
+      });
+    } catch {
+      return NextResponse.json({ error: "File not found on server" }, { status: 404 });
+    }
+  }
+
+  // Legacy: base64-stored in DB
   const buffer = Buffer.from(pkg.fileData, "base64");
   return new NextResponse(buffer, {
     headers: {
-      "Content-Type": pkg.fileMimeType ?? "application/octet-stream",
-      "Content-Disposition": `attachment; filename="${pkg.fileName ?? "package"}"`,
+      "Content-Type": mime,
+      "Content-Disposition": `attachment; filename="${name}"`,
       "Content-Length": String(buffer.length),
     },
   });

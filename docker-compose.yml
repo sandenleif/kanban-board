@@ -42,6 +42,8 @@ services:
       NODE_ENV: production
       NEXT_PUBLIC_APP_URL: ${APP_URL:-http://localhost:3000}
       FULL_SETUP: ${FULL_SETUP:-false}
+    volumes:
+      - uploads_data:/app/uploads
     depends_on:
       db:
         condition: service_healthy
@@ -54,3 +56,4 @@ services:
 
 volumes:
   postgres_data:
+  uploads_data:
