@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Trash2, MoveRight, Loader2, Lock, LockOpen,
   MessageSquare, Folder, Clock, User, Tag, Inbox,
+  Phone, Mail, Building2, LayoutList, StickyNote,
 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -36,6 +37,7 @@ type Ticket = {
   lockedBy: { id: string; name: string } | null;
   queue: { id: string; name: string } | null;
   team:  { id: string; name: string } | null;
+  contact: { id: string; name: string; email: string | null; phone: string | null; company: string | null; department: string | null; source: string; notes: string | null } | null;
   comments: Comment[];
 };
 type Queue = { id: string; name: string };
@@ -330,14 +332,64 @@ export function TicketDetail({ ticket, queues, teams, orgUsers, allWorkspaces, c
           </div>
 
           {/* Kundeninformation */}
-          {(ticket.fromEmail || ticket.fromName) && (
+          {(ticket.contact || ticket.fromName || ticket.fromEmail) && (
             <>
               <div className="px-4 py-2.5 border-t border-b border-border bg-muted/30">
-                <h3 className="text-xs font-semibold text-foreground">Kundeninformation</h3>
+                <h3 className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                  <User className="h-3 w-3" /> Kundeninformation
+                  {ticket.contact?.source === "ad" && (
+                    <span className="ml-auto text-[10px] text-primary bg-primary/10 rounded px-1.5 py-0.5 font-normal">AD</span>
+                  )}
+                </h3>
               </div>
-              <div className="px-4 py-3 space-y-1.5 text-xs text-muted-foreground">
-                {ticket.fromName && <InfoRow label="Name" value={ticket.fromName} />}
-                {ticket.fromEmail && <InfoRow label="E-Mail" value={ticket.fromEmail} />}
+              <div className="px-4 py-3 space-y-2 text-xs">
+                {/* Name */}
+                {(ticket.contact?.name ?? ticket.fromName) && (
+                  <div className="flex items-start gap-2">
+                    <User className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
+                    <span className="text-foreground font-medium">{ticket.contact?.name ?? ticket.fromName}</span>
+                  </div>
+                )}
+                {/* E-Mail */}
+                {(ticket.contact?.email ?? ticket.fromEmail) && (
+                  <div className="flex items-start gap-2">
+                    <Mail className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
+                    <a href={`mailto:${ticket.contact?.email ?? ticket.fromEmail}`}
+                      className="text-primary hover:underline break-all">
+                      {ticket.contact?.email ?? ticket.fromEmail}
+                    </a>
+                  </div>
+                )}
+                {/* Telefon */}
+                {ticket.contact?.phone && (
+                  <div className="flex items-start gap-2">
+                    <Phone className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
+                    <a href={`tel:${ticket.contact.phone}`} className="text-foreground hover:underline">
+                      {ticket.contact.phone}
+                    </a>
+                  </div>
+                )}
+                {/* Firma */}
+                {ticket.contact?.company && (
+                  <div className="flex items-start gap-2">
+                    <Building2 className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
+                    <span className="text-foreground">{ticket.contact.company}</span>
+                  </div>
+                )}
+                {/* Abteilung */}
+                {ticket.contact?.department && (
+                  <div className="flex items-start gap-2">
+                    <LayoutList className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
+                    <span className="text-foreground">{ticket.contact.department}</span>
+                  </div>
+                )}
+                {/* Notizen */}
+                {ticket.contact?.notes && (
+                  <div className="flex items-start gap-2">
+                    <StickyNote className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
+                    <span className="text-muted-foreground">{ticket.contact.notes}</span>
+                  </div>
+                )}
               </div>
             </>
           )}

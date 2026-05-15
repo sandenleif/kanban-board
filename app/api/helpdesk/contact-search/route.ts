@@ -80,12 +80,12 @@ async function searchLdap(
         client.search(config.baseDn, {
           filter,
           scope: "sub",
-          attributes: ["cn", "displayName", "mail", "sn", "givenName"],
+          attributes: ["cn", "displayName", "mail", "sn", "givenName", "telephoneNumber", "mobile", "department", "company", "title", "physicalDeliveryOfficeName"],
           sizeLimit: 10,
         }, (err2, res) => {
           if (err2) { client.destroy(); resolve([]); return; }
 
-          const results: { name: string; email: string; source: string }[] = [];
+          const results: { name: string; email: string; phone: string; mobile: string; department: string; company: string; title: string; source: string }[] = [];
 
           res.on("searchReference", () => {}); // ignore AD referrals
           res.on("searchEntry", (entry) => {
@@ -94,7 +94,14 @@ async function searchLdap(
 
             const name = get("displayName") || get("cn") || `${get("givenName")} ${get("sn")}`.trim();
             const email = get("mail");
-            if (name && email) results.push({ name, email, source: "ad" });
+            if (name && email) results.push({
+              name, email, source: "ad",
+              phone: get("telephoneNumber"),
+              mobile: get("mobile"),
+              department: get("department"),
+              company: get("company") || get("physicalDeliveryOfficeName"),
+              title: get("title"),
+            });
           });
 
           res.on("end", () => { client.destroy(); resolve(results); });

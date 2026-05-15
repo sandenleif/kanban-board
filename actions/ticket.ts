@@ -106,6 +106,9 @@ export async function createTicketAction(
   const topic = (formData.get("topic") as string)?.trim() || null;
   const inventoryNumber = (formData.get("inventoryNumber") as string)?.trim() || null;
   const requesterType = (formData.get("requesterType") as string) || "customer";
+  const fromName      = (formData.get("fromName") as string)?.trim() || null;
+  const fromEmail     = (formData.get("fromEmail") as string)?.trim() || null;
+  const contactId     = (formData.get("contactId") as string) || null;
 
   if (!title) return { error: "Titel ist erforderlich" };
 
@@ -113,6 +116,7 @@ export async function createTicketAction(
     data: {
       title, description, priority, queueId, teamId, categoryId, assignedToId,
       topic, inventoryNumber, requesterType, organizationId, createdById: session.userId,
+      fromName, fromEmail, contactId,
     },
   });
 

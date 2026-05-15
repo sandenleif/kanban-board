@@ -10,6 +10,11 @@ import { toast } from "sonner";
 interface Contact {
   name: string;
   email: string;
+  phone: string;
+  mobile: string;
+  department: string;
+  company: string;
+  title: string;
   source: "ad" | "manual";
 }
 
@@ -33,6 +38,7 @@ interface Props {
 export function ContactSearch({ hasElastic = false, ticketId, onContactCreated }: Props) {
   const [name, setName]             = useState("");
   const [email, setEmail]           = useState("");
+  const [contactId, setContactId]   = useState("");
   const [query, setQuery]           = useState("");
   const [results, setResults]       = useState<Contact[]>([]);
   const [loading, setLoading]       = useState(false);
@@ -41,6 +47,7 @@ export function ContactSearch({ hasElastic = false, ticketId, onContactCreated }
   const [showCreate, setShowCreate] = useState(false);
   const [createData, setCreateData] = useState({ phone: "", company: "", department: "" });
   const [isPending, startTransition] = useTransition();
+  const [saving, setSaving]         = useState(false);
 
   const dropRef  = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -55,7 +62,7 @@ export function ContactSearch({ hasElastic = false, ticketId, onContactCreated }
   }, []);
 
   const handleQueryChange = (v: string) => {
-    setQuery(v); setName(v); setFromAd(false);
+    setQuery(v); setName(v); setFromAd(false); setContactId("");
     clearTimeout(timerRef.current);
     if (v.length >= 2) {
       setLoading(true); setShowDrop(true);
@@ -71,6 +78,29 @@ export function ContactSearch({ hasElastic = false, ticketId, onContactCreated }
   const selectContact = (c: Contact) => {
     setName(c.name); setEmail(c.email); setQuery(c.name);
     setFromAd(c.source === "ad"); setShowDrop(false);
+
+    // Auto-save AD contact with all available fields to local DB
+    if (c.source === "ad" && c.email) {
+      setSaving(true);
+      startTransition(async () => {
+        const phone = c.phone || c.mobile || undefined;
+        const r = await createContactAction({
+          name: c.name,
+          email: c.email,
+          phone,
+          company: c.company || undefined,
+          department: c.department || undefined,
+          notes: c.title ? `Position: ${c.title}` : undefined,
+          source: "ad",
+          ticketId,
+        });
+        setSaving(false);
+        if (r.id) {
+          setContactId(r.id);
+          onContactCreated?.(r.id, c.name, c.email);
+        }
+      });
+    }
   };
 
   const handleCreateContact = () => {
@@ -82,13 +112,16 @@ export function ContactSearch({ hasElastic = false, ticketId, onContactCreated }
         phone: createData.phone.trim() || undefined,
         company: createData.company.trim() || undefined,
         department: createData.department.trim() || undefined,
-        source: fromAd ? "ad" : "manual",
+        source: "manual",
         ticketId,
       });
       if (r.error) { toast.error(r.error); return; }
       toast.success(`Kunde "${name}" angelegt`);
       setShowCreate(false);
-      onContactCreated?.(r.id!, name, email);
+      if (r.id) {
+        setContactId(r.id);
+        onContactCreated?.(r.id!, name, email);
+      }
     });
   };
 
@@ -96,15 +129,16 @@ export function ContactSearch({ hasElastic = false, ticketId, onContactCreated }
 
   return (
     <div className="space-y-2">
-      <input type="hidden" name="fromName" value={name} />
+      <input type="hidden" name="fromName"  value={name} />
       <input type="hidden" name="fromEmail" value={email} />
+      <input type="hidden" name="contactId" value={contactId} />
 
       <div ref={dropRef} className="relative">
         <div className="relative">
           <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input value={query} onChange={(e) => handleQueryChange(e.target.value)}
             placeholder="Name oder E-Mail des Anfragestellers…" className="pl-9 pr-9" autoComplete="off" />
-          {loading
+          {(loading || saving)
             ? <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
             : <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground opacity-50" />}
         </div>
@@ -122,12 +156,14 @@ export function ContactSearch({ hasElastic = false, ticketId, onContactCreated }
                 <button key={i} type="button" onMouseDown={() => selectContact(c)}
                   className="w-full flex items-center gap-3 px-3 py-2 text-sm hover:bg-muted transition-colors text-left">
                   <User className="h-4 w-4 text-muted-foreground shrink-0" />
-                  <div>
+                  <div className="flex-1 min-w-0">
                     <p className="font-medium text-foreground">{c.name}</p>
-                    <p className="text-xs text-muted-foreground">{c.email}</p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {[c.email, c.department, c.phone || c.mobile].filter(Boolean).join(" · ")}
+                    </p>
                   </div>
                   {c.source === "ad" && (
-                    <span className="ml-auto text-[10px] text-primary bg-primary/10 rounded px-1.5 py-0.5">AD</span>
+                    <span className="ml-auto text-[10px] text-primary bg-primary/10 rounded px-1.5 py-0.5 shrink-0">AD</span>
                   )}
                 </button>
               ))
@@ -136,9 +172,18 @@ export function ContactSearch({ hasElastic = false, ticketId, onContactCreated }
         )}
       </div>
 
-      {/* Email field */}
-      <Input value={email} onChange={(e) => setEmail(e.target.value)}
-        placeholder="E-Mail-Adresse (optional)" type="email" aria-label="E-Mail des Anfragestellers" />
+      {/* Email field — only shown for manual entry */}
+      {!fromAd && (
+        <Input value={email} onChange={(e) => setEmail(e.target.value)}
+          placeholder="E-Mail-Adresse (optional)" type="email" aria-label="E-Mail des Anfragestellers" />
+      )}
+
+      {/* AD contact saved indicator */}
+      {fromAd && contactId && (
+        <p className="text-xs text-green-600 flex items-center gap-1">
+          <Check className="h-3 w-3" /> In lokaler Kundendatenbank gespeichert
+        </p>
+      )}
 
       {/* Create contact button — shown when free text entered */}
       {isNewContact && !showCreate && (
