@@ -458,6 +458,12 @@ model Ticket {
   @@index([organizationId, status])
   @@index([organizationId, topic])
   @@index([organizationId, inventoryNumber])
+  @@index([organizationId, categoryId])
+  @@index([organizationId, createdAt(sort: Desc)])
+  @@index([organizationId, queueId])
+  @@index([organizationId, teamId])
+  @@index([assignedToId])
+  @@index([contactId])
   @@map("tickets")
 }
 
