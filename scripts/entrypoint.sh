@@ -12,8 +12,8 @@ fi
 
 PRISMA="node node_modules/prisma/build/index.js"
 
-echo "📦 Running database migrations..."
-until $PRISMA migrate deploy 2>&1; do
+echo "📦 Pushing database schema..."
+until $PRISMA db push --accept-data-loss 2>&1; do
   echo "   DB not ready yet, retrying in 3s..."
   sleep 3
 done

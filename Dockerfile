@@ -43,6 +43,8 @@ COPY --from=builder --chown=nextjs:nodejs /app/prisma                ./prisma
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma  ./node_modules/.prisma
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma  ./node_modules/@prisma
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/prisma   ./node_modules/prisma
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/ldapjs   ./node_modules/ldapjs
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@ldapjs  ./node_modules/@ldapjs
 
 COPY --chown=nextjs:nodejs scripts/entrypoint.sh ./entrypoint.sh
 RUN chmod +x ./entrypoint.sh

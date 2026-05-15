@@ -47,7 +47,11 @@ const nextConfig: NextConfig = {
     ];
   },
 
-  serverExternalPackages: ["@prisma/client", "bcryptjs"],
+  serverExternalPackages: ["@prisma/client", "bcryptjs", "ldapjs"],
+
+  outputFileTracingIncludes: {
+    "/**": ["./node_modules/ldapjs/**", "./node_modules/@ldapjs/**"],
+  },
 };
 
 export default withNextIntl(nextConfig);

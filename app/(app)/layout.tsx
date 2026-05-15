@@ -1,4 +1,4 @@
-import { requireSession, clearSession } from "@/lib/auth";
+import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { Sidebar } from "@/components/layout/Sidebar";
@@ -14,25 +14,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     select: { status: true, isAdmin: true, avatarBase64: true, avatarMimeType: true },
   });
 
-  if (!user) {
-    await clearSession();
-    redirect("/login");
-  }
+  if (!user) redirect("/login");
 
   if (user.status === "PENDING") redirect("/pending");
-
-  if (user.status === "SUSPENDED") {
-    await clearSession();
-    redirect("/login");
-  }
+  if (user.status === "SUSPENDED") redirect("/login");
 
   // Enterprise: super admin has their own panel
   if (session.isSuperAdmin) redirect("/super-admin");
 
-  if (!session.organizationId) {
-    await clearSession();
-    redirect("/login");
-  }
+  if (!session.organizationId) redirect("/login");
 
   const [workspaces, appSettings, notifications] = await Promise.all([
     prisma.workspaceMember.findMany({
