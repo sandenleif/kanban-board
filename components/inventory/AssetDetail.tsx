@@ -3,13 +3,18 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Pencil, Trash2, UserPlus, User, Clock, Package, Loader2 } from "lucide-react";
+import { ArrowLeft, Pencil, Trash2, UserPlus, User, Clock, Package, Loader2, Cpu, HardDrive, MemoryStick, Monitor, Wifi } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { updateAssetAction, deleteAssetAction, assignAssetAction } from "@/actions/inventory";
 import { toast } from "sonner";
 import type { AssetStatus } from "@prisma/client";
 
 type Assignment = { id: string; assignedAt: Date; returnedAt: Date | null; user: { id: string; name: string } };
+type AgentHardware = {
+  cpuName: string | null; cpuCores: number | null; ramGb: number | null; diskGb: number | null;
+  osVersion: string | null; ipAddress: string | null; macAddress: string | null;
+  domain: string | null; lastSeenAt: Date | null; hostname: string;
+};
 type Asset = {
   id: string; name: string; inventoryNumber: string | null; serialNumber: string | null;
   manufacturer: string | null; model: string | null; status: AssetStatus;
@@ -18,6 +23,7 @@ type Asset = {
   location:   { id: string; name: string; building: string | null } | null;
   assignedTo: { id: string; name: string } | null;
   assignments: Assignment[];
+  agent: AgentHardware | null;
 };
 type Category = { id: string; name: string };
 type Location  = { id: string; name: string; building: string | null };
@@ -131,6 +137,66 @@ export function AssetDetail({ asset, categories, locations, orgUsers, isAdmin }:
             } />
             <InfoRow label="Kaufpreis" value={asset.purchasePrice ? `${Number(asset.purchasePrice).toFixed(2)} €` : null} />
           </div>
+
+          {/* Hardware from agent */}
+          {asset.agent && (
+            <div className="rounded-xl border border-border bg-card p-5">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <Monitor className="h-4 w-4 text-primary" /> Hardware
+                </h2>
+                {asset.agent.lastSeenAt && (
+                  <span className="text-xs text-muted-foreground">
+                    Letzter Kontakt: {new Date(asset.agent.lastSeenAt).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                {asset.agent.osVersion && (
+                  <div className="flex items-center gap-2 col-span-2">
+                    <Monitor className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <span className="text-foreground">{asset.agent.osVersion}</span>
+                  </div>
+                )}
+                {asset.agent.cpuName && (
+                  <div className="flex items-center gap-2 col-span-2">
+                    <Cpu className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <span className="text-foreground">{asset.agent.cpuName}{asset.agent.cpuCores ? ` (${asset.agent.cpuCores} Kerne)` : ""}</span>
+                  </div>
+                )}
+                {asset.agent.ramGb && (
+                  <div className="flex items-center gap-2">
+                    <MemoryStick className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <span className="text-foreground">{asset.agent.ramGb} GB RAM</span>
+                  </div>
+                )}
+                {asset.agent.diskGb && (
+                  <div className="flex items-center gap-2">
+                    <HardDrive className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <span className="text-foreground">{asset.agent.diskGb} GB Disk</span>
+                  </div>
+                )}
+                {asset.agent.ipAddress && (
+                  <div className="flex items-center gap-2">
+                    <Wifi className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <span className="font-mono text-foreground">{asset.agent.ipAddress}</span>
+                  </div>
+                )}
+                {asset.agent.macAddress && (
+                  <div className="flex items-center gap-2">
+                    <Wifi className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <span className="font-mono text-foreground">{asset.agent.macAddress}</span>
+                  </div>
+                )}
+                {asset.agent.domain && (
+                  <div className="flex items-center gap-2 col-span-2">
+                    <User className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <span className="text-foreground">{asset.agent.domain}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {asset.notes && (
             <div className="rounded-xl border border-border bg-card p-5">

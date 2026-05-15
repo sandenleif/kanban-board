@@ -27,6 +27,14 @@ export default async function AssetDetailPage({ params }: { params: Promise<{ as
           take: 20,
         },
       },
+    }).then(async (a) => {
+      if (!a) return a;
+      // Load linked agent hardware data
+      const agent = await prisma.softwareAgent.findFirst({
+        where: { assetId: a.id },
+        select: { cpuName: true, cpuCores: true, ramGb: true, diskGb: true, osVersion: true, ipAddress: true, macAddress: true, domain: true, lastSeenAt: true, hostname: true },
+      });
+      return { ...a, agent: agent ?? null };
     }),
     prisma.assetCategory.findMany({ where: { organizationId: user.organizationId }, orderBy: { position: "asc" } }),
     prisma.assetLocation.findMany({ where: { organizationId: user.organizationId }, orderBy: { name: "asc" } }),
