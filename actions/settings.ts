@@ -98,6 +98,40 @@ export async function updateSmtpSettingsAction(_prev: ActionResult, formData: Fo
   return { success: true };
 }
 
+export async function updateOrganizationAction(
+  _prev: ActionResult,
+  formData: FormData
+): Promise<ActionResult & { newSlug?: string }> {
+  const { organizationId } = await requireAdmin();
+
+  const name = (formData.get("orgName") as string)?.trim();
+  if (!name || name.length < 2) return { error: "Name muss mindestens 2 Zeichen haben" };
+
+  // Build slug from name: lowercase, replace spaces/special chars with hyphens
+  const slug = name
+    .toLowerCase()
+    .replace(/[äöüß]/g, (c) => ({ ä: "ae", ö: "oe", ü: "ue", ß: "ss" }[c] ?? c))
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+
+  if (!slug) return { error: "Name ergibt keinen gültigen Slug" };
+
+  // Check slug uniqueness (ignore own org)
+  const conflict = await prisma.organization.findFirst({
+    where: { slug, NOT: { id: organizationId } },
+  });
+  if (conflict) return { error: `Der Name "${name}" ist bereits vergeben` };
+
+  await prisma.organization.update({
+    where: { id: organizationId },
+    data: { name, slug },
+  });
+
+  revalidatePath("/admin/users");
+  return { success: true, newSlug: slug };
+}
+
 export async function getLogoAction() {
   const session = await requireSession();
   if (!session.organizationId) return null;

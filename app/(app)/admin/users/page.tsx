@@ -11,6 +11,7 @@ import { ExchangeConfigPanel } from "@/components/admin/ExchangeConfigPanel";
 import { HelpdeskAdminPanel } from "@/components/admin/HelpdeskAdminPanel";
 import { LdapConfigPanel } from "@/components/admin/LdapConfigPanel";
 import { PortalUsersPanel } from "@/components/admin/PortalUsersPanel";
+import { OrganizationSettingsPanel } from "@/components/admin/OrganizationSettingsPanel";
 import { isFullSetup } from "@/lib/features";
 import { Users, Clock, CheckCircle2, Ban } from "lucide-react";
 
@@ -20,7 +21,7 @@ export default async function AdminUsersPage() {
 
   const currentUser = await prisma.user.findUnique({
     where: { id: session.userId },
-    select: { isAdmin: true, organizationId: true, organization: { select: { slug: true } } },
+    select: { isAdmin: true, organizationId: true, organization: { select: { slug: true, name: true } } },
   });
   if (!currentUser?.isAdmin) notFound();
 
@@ -81,6 +82,12 @@ export default async function AdminUsersPage() {
         ))}
       </div>
 
+      {currentUser.organization && (
+        <OrganizationSettingsPanel
+          currentName={currentUser.organization.name}
+          currentSlug={currentUser.organization.slug}
+        />
+      )}
       <LocaleSelector currentLocale={appSettings?.locale ?? "en"} />
       <LogoUpload currentLogo={appSettings ? { ...appSettings, siteTitle: appSettings.siteTitle } : null} />
       {isFullSetup && (
