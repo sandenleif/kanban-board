@@ -1,18 +1,18 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    KanbanFlow Software-Agent für Windows
+    KanbanFlow Software-Agent fuer Windows
 .DESCRIPTION
     Meldet sich automatisch beim KanbanFlow-Server an, inventarisiert die Hardware
-    und führt Software-Jobs aus.
+    und fuehrt Software-Jobs aus.
 .PARAMETER Setup
     Erstkonfiguration: Server-URL und Enrollment-Token eingeben, Scheduled Task anlegen.
 .PARAMETER ServerUrl
     URL des KanbanFlow-Servers (z.B. http://172.29.13.134:3000)
 .PARAMETER EnrollmentToken
-    Enrollment-Token aus Admin → Software (einmalig für alle PCs gleich)
+    Enrollment-Token aus Admin → Software (einmalig fuer alle PCs gleich)
 .EXAMPLE
-    # Erstkonfiguration (als Administrator ausführen):
+    # Erstkonfiguration (als Administrator ausfuehren):
     .\agent.ps1 -Setup -ServerUrl "http://172.29.13.134:3000" -EnrollmentToken "abc123..."
 
     # Manueller Test-Lauf:
@@ -187,7 +187,7 @@ function Install-ScheduledTask {
     Write-Log "Scheduled Task '$TaskName' eingerichtet (alle 5 Minuten als SYSTEM)."
 }
 
-# ── Job-Ausführung ────────────────────────────────────────────────────────────
+# ── Job-Ausfuehrung ───────────────────────────────────────────────────────────
 
 function Invoke-Job {
     param([hashtable]$Job, [string]$ServerUrl, [string]$ApiKey)
@@ -206,7 +206,8 @@ function Invoke-Job {
             }
             "file" {
                 if (-not $Job.fileUrl) { throw "Keine Download-URL" }
-                $dest = "$TempDir\$($Job.jobId)_$($Job.fileName ?? 'setup.exe')"
+                $fname = if ($Job.fileName) { $Job.fileName } else { "setup.exe" }
+                $dest = "$TempDir\$($Job.jobId)_$fname"
                 if (-not (Test-Path $TempDir)) { New-Item -ItemType Directory -Path $TempDir -Force | Out-Null }
 
                 $fullUrl = "$ServerUrl$($Job.fileUrl)"
@@ -292,7 +293,7 @@ function Start-AgentLoop {
 if ($Setup) {
     if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
         [Security.Principal.WindowsBuiltInRole]::Administrator)) {
-        Write-Host "FEHLER: Setup muss als Administrator ausgeführt werden." -ForegroundColor Red
+        Write-Host "FEHLER: Setup muss als Administrator ausgefuehrt werden." -ForegroundColor Red
         exit 1
     }
 
@@ -327,7 +328,7 @@ if ($Setup) {
     # Normaler Polling-Lauf (Scheduled Task)
     $cfg = Load-Config
     if (-not $cfg) {
-        Write-Log "Keine Konfiguration. Setup ausführen: .\agent.ps1 -Setup" "ERROR"
+        Write-Log "Keine Konfiguration. Setup ausfuehren: .\agent.ps1 -Setup" "ERROR"
         exit 1
     }
     Start-AgentLoop -ServerUrl $cfg.ServerUrl -ApiKey $cfg.ApiKey
