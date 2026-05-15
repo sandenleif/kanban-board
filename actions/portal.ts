@@ -15,11 +15,14 @@ export async function portalLoginAction(
   _prev: ActionResult,
   formData: FormData
 ): Promise<ActionResult> {
-  const orgSlug = formData.get("orgSlug") as string;
-  const email   = (formData.get("email") as string)?.trim().toLowerCase();
-  const password = formData.get("password") as string;
+  const orgSlug    = formData.get("orgSlug") as string;
+  const identifier = (formData.get("email") as string)?.trim().toLowerCase();
+  const password   = formData.get("password") as string;
 
-  if (!email || !password) return { error: "E-Mail und Passwort erforderlich" };
+  if (!identifier || !password) return { error: "Benutzername/E-Mail und Passwort erforderlich" };
+
+  // For local portal-user lookup, always search by email
+  const email = identifier;
 
   const org = await prisma.organization.findUnique({
     where: { slug: orgSlug },
@@ -47,21 +50,22 @@ export async function portalLoginAction(
     redirect(`/portal/${orgSlug}`);
   }
 
-  // 2. Try LDAP login if configured
+  // 2. Try LDAP login if configured (portal uses full baseDn — all AD users allowed)
   if (org.ldapConfig?.enabled) {
-    const ldapResult = await ldapAuthenticate(org.ldapConfig, email, password);
+    const ldapResult = await ldapAuthenticate(org.ldapConfig, identifier, password, { useLoginBaseDn: false });
     if (ldapResult) {
-      // Auto-create or update portal user from LDAP
+      // Use the AD email for the portal user record (not the raw identifier)
+      const adEmail = ldapResult.email || email;
       const upserted = await prisma.portalUser.upsert({
-        where: { organizationId_email: { organizationId: org.id, email } },
+        where: { organizationId_email: { organizationId: org.id, email: adEmail } },
         create: {
           organizationId: org.id,
-          name: ldapResult.name || email.split("@")[0],
-          email,
+          name: ldapResult.name || adEmail.split("@")[0],
+          email: adEmail,
           ldapUsername: ldapResult.username,
           status: "ACTIVE",
         },
-        update: { name: ldapResult.name || email.split("@")[0], ldapUsername: ldapResult.username },
+        update: { name: ldapResult.name || adEmail.split("@")[0], ldapUsername: ldapResult.username },
       });
 
       await createPortalSession({
@@ -73,10 +77,10 @@ export async function portalLoginAction(
       });
       redirect(`/portal/${orgSlug}`);
     }
-    return { error: "Anmeldung fehlgeschlagen. Bitte prüfen Sie Ihre Zugangsdaten." };
+    return { error: "Anmeldung fehlgeschlagen. Bitte Netzwerk-Benutzername (vorname.nachname) oder E-Mail prüfen." };
   }
 
-  return { error: "E-Mail oder Passwort falsch" };
+  return { error: "Benutzername/E-Mail oder Passwort falsch" };
 }
 
 

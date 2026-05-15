@@ -21,8 +21,8 @@ export function PortalLoginForm({ orgSlug }: { orgSlug: string }) {
       )}
 
       <div className="space-y-1.5">
-        <Label htmlFor="email">E-Mail-Adresse</Label>
-        <Input id="email" name="email" type="email" placeholder="ihre@email.de" required autoComplete="email" />
+        <Label htmlFor="email">Benutzername oder E-Mail</Label>
+        <Input id="email" name="email" type="text" placeholder="vorname.nachname" required autoComplete="username" />
       </div>
 
       <div className="space-y-1.5">

@@ -20,20 +20,23 @@ export type LdapUser = {
 /**
  * Authenticate a user against LDAP.
  * - identifier can be an email address OR a plain sAMAccountName (e.g. "leif.sanden")
+ * - useLoginBaseDn: true = restrict search to loginBaseDn (main app), false = use full baseDn (portal)
  * - Returns user info on success, null on failure / not found / wrong password.
  */
 export async function ldapAuthenticate(
   config: LdapConfig,
   identifier: string,
-  password: string
+  password: string,
+  options?: { useLoginBaseDn?: boolean }
 ): Promise<LdapUser | null> {
   try {
     const ldap = await import("ldapjs").catch(() => null);
     if (!ldap) return null;
 
     const isEmail = identifier.includes("@");
-    // For login, use loginBaseDn if configured (restricts to a specific OU/group)
-    const searchBase = config.loginBaseDn?.trim() || config.baseDn;
+    // Main app uses loginBaseDn (IT restriction); portal uses full baseDn
+    const useLoginBase = options?.useLoginBaseDn ?? true;
+    const searchBase = (useLoginBase && config.loginBaseDn?.trim()) ? config.loginBaseDn.trim() : config.baseDn;
 
     // Build search filter: by email/UPN or by sAMAccountName
     const idFilter = isEmail
