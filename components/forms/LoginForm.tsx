@@ -24,13 +24,13 @@ export function LoginForm() {
       )}
 
       <div className="space-y-1.5">
-        <Label htmlFor="email">{c("email")}</Label>
+        <Label htmlFor="email">Benutzername oder E-Mail</Label>
         <Input
           id="email"
           name="email"
-          type="email"
-          placeholder={t("emailPlaceholder")}
-          autoComplete="email"
+          type="text"
+          placeholder="vorname.nachname"
+          autoComplete="username"
           required
         />
       </div>

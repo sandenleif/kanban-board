@@ -10,7 +10,7 @@ import { Loader2, Database, AlertCircle, CheckCircle2, Wifi } from "lucide-react
 
 interface InitialConfig {
   host: string; port: number; bindDn: string; baseDn: string;
-  userFilter: string; enabled: boolean; lastSyncAt: Date | null;
+  loginBaseDn: string | null; userFilter: string; enabled: boolean; lastSyncAt: Date | null;
 }
 
 export function LdapConfigPanel({ initial }: { initial: InitialConfig | null }) {
@@ -111,9 +111,15 @@ export function LdapConfigPanel({ initial }: { initial: InitialConfig | null }) 
                 placeholder={initial ? "Leer lassen = unverändert" : "Passwort"} />
             </div>
             <div className="space-y-1.5 col-span-2">
-              <Label htmlFor="ldapBaseDn">Base DN</Label>
+              <Label htmlFor="ldapBaseDn">Base DN <span className="text-muted-foreground font-normal">(Kontakt-Suche)</span></Label>
               <Input ref={baseDnRef} id="ldapBaseDn" name="ldapBaseDn" defaultValue={initial?.baseDn}
-                placeholder="ou=Users,dc=company,dc=com" />
+                placeholder="dc=intern,dc=company,dc=de" />
+            </div>
+            <div className="space-y-1.5 col-span-2">
+              <Label htmlFor="ldapLoginBaseDn">Login Base DN <span className="text-muted-foreground font-normal">(nur diese OU darf sich einloggen)</span></Label>
+              <Input id="ldapLoginBaseDn" name="ldapLoginBaseDn" defaultValue={initial?.loginBaseDn ?? ""}
+                placeholder="OU=IT,OU=Siloah,OU=Benutzer,DC=intern,DC=company,DC=de" />
+              <p className="text-xs text-muted-foreground">Leer lassen = alle AD-Benutzer dürfen sich einloggen</p>
             </div>
             <div className="space-y-1.5 col-span-2">
               <Label htmlFor="ldapUserFilter">User-Filter</Label>

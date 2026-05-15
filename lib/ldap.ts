@@ -1,4 +1,4 @@
-// Shared LDAP authentication helper used by both main login and portal login.
+// Shared LDAP authentication helper.
 
 type LdapConfig = {
   host: string;
@@ -7,6 +7,7 @@ type LdapConfig = {
   bindPassword: string;
   baseDn: string;
   userFilter: string;
+  loginBaseDn?: string | null; // if set, restricts login searches to this OU
 };
 
 export type LdapUser = {
@@ -16,15 +17,29 @@ export type LdapUser = {
   email: string;
 };
 
-// Authenticate a user against LDAP. Returns user info on success, null on failure.
+/**
+ * Authenticate a user against LDAP.
+ * - identifier can be an email address OR a plain sAMAccountName (e.g. "leif.sanden")
+ * - Returns user info on success, null on failure / not found / wrong password.
+ */
 export async function ldapAuthenticate(
   config: LdapConfig,
-  email: string,
+  identifier: string,
   password: string
 ): Promise<LdapUser | null> {
   try {
     const ldap = await import("ldapjs").catch(() => null);
     if (!ldap) return null;
+
+    const isEmail = identifier.includes("@");
+    // For login, use loginBaseDn if configured (restricts to a specific OU/group)
+    const searchBase = config.loginBaseDn?.trim() || config.baseDn;
+
+    // Build search filter: by email/UPN or by sAMAccountName
+    const idFilter = isEmail
+      ? `(|(mail=${identifier})(userPrincipalName=${identifier}))`
+      : `(sAMAccountName=${identifier})`;
+    const filter = `(&${config.userFilter}${idFilter})`;
 
     return await new Promise((resolve) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -41,10 +56,9 @@ export async function ldapAuthenticate(
       client.bind(config.bindDn, config.bindPassword, (bindErr: Error | null) => {
         if (bindErr) { client.destroy(); resolve(null); return; }
 
-        // Step 2: search for the user by email or UPN
-        const filter = `(&${config.userFilter}(|(mail=${email})(userPrincipalName=${email})))`;
+        // Step 2: find the user
         client.search(
-          config.baseDn,
+          searchBase,
           { filter, scope: "sub", attributes: ["dn", "cn", "displayName", "mail", "sAMAccountName"], sizeLimit: 2 },
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (searchErr: Error | null, res: any) => {
@@ -62,14 +76,14 @@ export async function ldapAuthenticate(
               const get = (a: string) => (entry.pojo?.attributes ?? []).find((x: any) => x.type === a)?.values?.[0] ?? "";
               userDn    = entry.dn.toString();
               userName  = get("displayName") || get("cn");
-              userEmail = get("mail") || email;
-              username  = get("sAMAccountName") || email.split("@")[0];
+              userEmail = get("mail") || (isEmail ? identifier : `${identifier}@${config.baseDn.replace(/^dc=/i, "").replace(/,dc=/gi, ".")}`);
+              username  = get("sAMAccountName") || identifier;
             });
             res.on("error", () => { client.destroy(); resolve(null); });
             res.on("end", () => {
               if (!userDn) { client.destroy(); resolve(null); return; }
 
-              // Step 3: bind as the found user to verify their password
+              // Step 3: bind as the user to verify password
               client.bind(userDn, password, (userBindErr: Error | null) => {
                 client.destroy();
                 if (userBindErr) { resolve(null); return; }

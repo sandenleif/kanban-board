@@ -132,6 +132,7 @@ export async function saveLdapConfigAction(
   const bindDn = (formData.get("ldapBindDn") as string)?.trim();
   const bindPassword = (formData.get("ldapBindPassword") as string) || "";
   const baseDn = (formData.get("ldapBaseDn") as string)?.trim();
+  const loginBaseDn = (formData.get("ldapLoginBaseDn") as string)?.trim() || null;
   const userFilter = (formData.get("ldapUserFilter") as string)?.trim() || "(objectClass=person)";
   const enabled = formData.get("ldapEnabled") === "true";
 
@@ -141,8 +142,8 @@ export async function saveLdapConfigAction(
 
   await prisma.ldapConfig.upsert({
     where: { organizationId },
-    create: { organizationId, host, port, bindDn, bindPassword, baseDn, userFilter, enabled },
-    update: { host, port, bindDn, baseDn, userFilter, enabled, ...(bindPassword ? { bindPassword } : {}) },
+    create: { organizationId, host, port, bindDn, bindPassword, baseDn, loginBaseDn, userFilter, enabled },
+    update: { host, port, bindDn, baseDn, loginBaseDn, userFilter, enabled, ...(bindPassword ? { bindPassword } : {}) },
   });
 
   revalidatePath("/admin/users");

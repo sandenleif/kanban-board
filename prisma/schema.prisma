@@ -502,6 +502,7 @@ model LdapConfig {
   bindDn         String
   bindPassword   String
   baseDn         String
+  loginBaseDn    String?
   userFilter     String   @default("(objectClass=person)")
   enabled        Boolean  @default(false)
   lastSyncAt     DateTime?

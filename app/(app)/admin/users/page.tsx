@@ -108,7 +108,8 @@ export default async function AdminUsersPage() {
       {isFullSetup && (
         <LdapConfigPanel initial={ldapConfig ? {
           host: ldapConfig.host, port: ldapConfig.port, bindDn: ldapConfig.bindDn,
-          baseDn: ldapConfig.baseDn, userFilter: ldapConfig.userFilter,
+          baseDn: ldapConfig.baseDn, loginBaseDn: ldapConfig.loginBaseDn,
+          userFilter: ldapConfig.userFilter,
           enabled: ldapConfig.enabled, lastSyncAt: ldapConfig.lastSyncAt,
         } : null} />
       )}
