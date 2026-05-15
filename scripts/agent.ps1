@@ -199,8 +199,15 @@ function Invoke-Job {
         switch ($Job.type) {
             "winget" {
                 if (-not $Job.wingetId) { throw "Keine winget-ID" }
-                $log.AppendLine("winget install --id $($Job.wingetId) --silent") | Out-Null
-                $out = & winget install --id $Job.wingetId --silent --accept-package-agreements --accept-source-agreements 2>&1
+                # Use custom params if set, otherwise use sensible defaults
+                if ($Job.params) {
+                    $wingetArgs = ($Job.params -split '\s+' | Where-Object { $_ -ne "" })
+                    $log.AppendLine("winget install --id $($Job.wingetId) $($Job.params)") | Out-Null
+                    $out = & winget install --id $Job.wingetId @wingetArgs 2>&1
+                } else {
+                    $log.AppendLine("winget install --id $($Job.wingetId) --silent --accept-package-agreements --accept-source-agreements") | Out-Null
+                    $out = & winget install --id $Job.wingetId --silent --accept-package-agreements --accept-source-agreements 2>&1
+                }
                 $log.AppendLine(($out -join "`n")) | Out-Null
                 $exitCode = $LASTEXITCODE
             }
