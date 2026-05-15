@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { TicketList } from "@/components/helpdesk/TicketList";
 import { HelpdeskOverview } from "@/components/helpdesk/HelpdeskOverview";
 import { EmailCheckButton } from "@/components/helpdesk/EmailCheckButton";
+import { getCachedQueues, getCachedTeams, getCachedCategories, getCachedOrgUsers, getCachedTicketStats } from "@/lib/cache";
 
 export default async function HelpdeskPage({
   searchParams,
@@ -32,22 +33,20 @@ export default async function HelpdeskPage({
   const pageNum = Math.max(1, parseInt(page ?? "1"));
   const isListView = view === "list";
 
-  const [queues, teams, categories, exchangeConfig, orgUsers, stats] = await Promise.all([
-    prisma.ticketQueue.findMany({ where: { organizationId: orgId }, orderBy: { position: "asc" } }),
-    prisma.ticketTeam.findMany({ where: { organizationId: orgId }, orderBy: { position: "asc" } }),
-    prisma.ticketCategory.findMany({ where: { organizationId: orgId }, orderBy: { position: "asc" } }),
+  const [queues, teams, categories, exchangeConfig, orgUsers, cachedStats] = await Promise.all([
+    getCachedQueues(orgId),
+    getCachedTeams(orgId),
+    getCachedCategories(orgId),
     prisma.exchangeConfig.findUnique({ where: { organizationId: orgId }, select: { enabled: true, lastCheckedAt: true } }),
-    prisma.user.findMany({ where: { organizationId: orgId, status: "ACTIVE" }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
-    prisma.ticket.groupBy({ by: ["status"], where: { organizationId: orgId }, _count: { id: true } }),
+    getCachedOrgUsers(orgId),
+    getCachedTicketStats(orgId),
   ]);
 
+  const { stats, created7, closed7, teamStats, escalationThreshold } = cachedStats;
   const statusMap = Object.fromEntries(stats.map((s) => [s.status, s._count.id]));
-  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-  const escalationThreshold = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-  const [created7, closed7, escalatedTickets, newTickets, inProgressTickets, teamStats] = await Promise.all([
-    prisma.ticket.findMany({ where: { organizationId: orgId, createdAt: { gte: sevenDaysAgo } }, select: { createdAt: true } }),
-    prisma.ticket.findMany({ where: { organizationId: orgId, closedAt: { gte: sevenDaysAgo } }, select: { closedAt: true } }),
+  // Live data for escalated/new/in-progress tickets (not cached — always fresh)
+  const [escalatedTickets, newTickets, inProgressTickets] = await Promise.all([
     prisma.ticket.findMany({
       where: { organizationId: orgId, status: { in: ["OPEN", "IN_PROGRESS"] }, createdAt: { lt: escalationThreshold } },
       include: { queue: { select: { name: true } }, assignedTo: { select: { name: true } }, createdBy: { select: { name: true } }, lockedBy: { select: { name: true } } },
@@ -62,12 +61,6 @@ export default async function HelpdeskPage({
       where: { organizationId: orgId, status: "IN_PROGRESS" },
       include: { queue: { select: { name: true } }, assignedTo: { select: { name: true } }, createdBy: { select: { name: true } }, lockedBy: { select: { name: true } } },
       orderBy: { updatedAt: "desc" }, take: 5,
-    }),
-    // Team stats: count open tickets per team + by requesterType
-    prisma.ticket.groupBy({
-      by: ["requesterType"],
-      where: { organizationId: orgId, status: { in: ["OPEN", "IN_PROGRESS"] } },
-      _count: { id: true },
     }),
   ]);
 
