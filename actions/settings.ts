@@ -98,6 +98,18 @@ export async function updateSmtpSettingsAction(_prev: ActionResult, formData: Fo
   return { success: true };
 }
 
+export async function regenerateEnrollmentTokenAction(): Promise<ActionResult & { token?: string }> {
+  const { organizationId } = await requireAdmin();
+  const token = require("crypto").randomBytes(24).toString("hex");
+  await prisma.appSettings.upsert({
+    where:  { organizationId },
+    create: { organizationId, enrollmentToken: token },
+    update: { enrollmentToken: token },
+  });
+  revalidatePath("/software");
+  return { success: true, token };
+}
+
 export async function updateOrganizationAction(
   _prev: ActionResult,
   formData: FormData

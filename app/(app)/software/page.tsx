@@ -14,7 +14,7 @@ export default async function SoftwarePage() {
   if (!user?.organizationId) notFound();
   const orgId = user.organizationId;
 
-  const [packages, agents, recentJobs] = await Promise.all([
+  const [packages, agents, recentJobs, appSettings] = await Promise.all([
     prisma.softwarePackage.findMany({
       where: { organizationId: orgId },
       include: { _count: { select: { jobs: true } } },
@@ -34,6 +34,10 @@ export default async function SoftwarePage() {
       orderBy: { createdAt: "desc" },
       take: 20,
     }),
+    prisma.appSettings.findUnique({
+      where: { organizationId: orgId },
+      select: { enrollmentToken: true },
+    }),
   ]);
 
   return (
@@ -42,6 +46,7 @@ export default async function SoftwarePage() {
       agents={agents}
       recentJobs={recentJobs}
       isAdmin={user.isAdmin}
+      enrollmentToken={appSettings?.enrollmentToken ?? null}
     />
   );
 }

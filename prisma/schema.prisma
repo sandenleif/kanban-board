@@ -111,13 +111,14 @@ model AppSettings {
   logoMimeType   String?
   locale         String   @default("en")
   siteTitle      String?
-  smtpHost       String?
-  smtpPort       Int?
-  smtpUser       String?
-  smtpPassword   String?
-  smtpFrom       String?
-  smtpSecure     Boolean  @default(false)
-  updatedAt      DateTime @updatedAt
+  smtpHost        String?
+  smtpPort        Int?
+  smtpUser        String?
+  smtpPassword    String?
+  smtpFrom        String?
+  smtpSecure      Boolean  @default(false)
+  enrollmentToken String?  // shared secret for PC auto-registration
+  updatedAt       DateTime @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
@@ -691,7 +692,17 @@ model SoftwareAgent {
   organizationId String
   hostname       String
   ipAddress      String?
+  macAddress     String?
   osVersion      String?
+  manufacturer   String?
+  model          String?
+  serialNumber   String?
+  cpuName        String?
+  cpuCores       Int?
+  ramGb          Int?
+  diskGb         Int?
+  domain         String?
+  assetId        String?   // linked inventory asset
   apiKey         String    @unique @default(cuid())
   lastSeenAt     DateTime?
   createdAt      DateTime  @default(now())

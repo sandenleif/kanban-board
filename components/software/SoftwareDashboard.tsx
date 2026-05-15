@@ -3,10 +3,10 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Plus, MonitorSmartphone, Package, CheckCircle2, XCircle, Clock, Loader2, Trash2, Key, Wifi, WifiOff } from "lucide-react";
+import { Plus, MonitorSmartphone, Package, CheckCircle2, XCircle, Clock, Loader2, Trash2, Key, Wifi, WifiOff, RefreshCw, Copy, Terminal } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { createAgentAction, deleteAgentAction } from "@/actions/software";
+import { deleteAgentAction } from "@/actions/software";
+import { regenerateEnrollmentTokenAction } from "@/actions/settings";
 import { toast } from "sonner";
 import type { JobStatus } from "@prisma/client";
 
@@ -27,24 +27,25 @@ function isOnline(lastSeenAt: Date | null) {
   return Date.now() - new Date(lastSeenAt).getTime() < 5 * 60 * 1000;
 }
 
-export function SoftwareDashboard({ packages, agents, recentJobs, isAdmin }: {
-  packages: Pkg[]; agents: Agent[]; recentJobs: Job[]; isAdmin: boolean;
+export function SoftwareDashboard({ packages, agents, recentJobs, isAdmin, enrollmentToken: initialToken }: {
+  packages: Pkg[]; agents: Agent[]; recentJobs: Job[]; isAdmin: boolean; enrollmentToken: string | null;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [newHost, setNewHost] = useState("");
-  const [newKey, setNewKey] = useState<string | null>(null);
+  const [token, setToken] = useState(initialToken);
 
-  const handleAddAgent = () => {
-    if (!newHost.trim()) return;
+  const handleRegenToken = () => {
+    if (!confirm("Neuen Enrollment-Token generieren? Alle PCs müssen danach neu eingerichtet werden.")) return;
     startTransition(async () => {
-      const r = await createAgentAction(newHost.trim());
+      const r = await regenerateEnrollmentTokenAction();
       if (r.error) { toast.error(r.error); return; }
-      toast.success(`PC "${newHost}" registriert`);
-      setNewKey(r.apiKey ?? null);
-      setNewHost("");
-      router.refresh();
+      setToken(r.token ?? null);
+      toast.success("Neuer Token generiert");
     });
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text).then(() => toast.success("Kopiert"));
   };
 
   const handleDeleteAgent = (id: string, hostname: string) => {
@@ -98,20 +99,36 @@ export function SoftwareDashboard({ packages, agents, recentJobs, isAdmin }: {
           </h2>
 
           {isAdmin && (
-            <div className="flex gap-2">
-              <Input placeholder="Hostname…" value={newHost} onChange={(e) => setNewHost(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleAddAgent()} className="h-8 text-xs" />
-              <Button size="sm" className="h-8 shrink-0" onClick={handleAddAgent} disabled={isPending}>
-                {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+            <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-2.5">
+              <p className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                <Key className="h-3.5 w-3.5 text-primary" /> Enrollment-Token
+              </p>
+              {token ? (
+                <>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 font-mono text-xs bg-background rounded border border-border px-2 py-1 truncate">{token}</code>
+                    <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" onClick={() => copyToClipboard(token)}>
+                      <Copy className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">Script-Befehl auf dem PC (als Admin):</p>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 font-mono text-[10px] bg-background rounded border border-border px-2 py-1 text-muted-foreground break-all">
+                      {`.\agent.ps1 -Setup -ServerUrl "${typeof window !== "undefined" ? window.location.origin : "http://SERVER:3000"}" -EnrollmentToken "${token}"`}
+                    </code>
+                    <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0"
+                      onClick={() => copyToClipboard(`.\agent.ps1 -Setup -ServerUrl "${typeof window !== "undefined" ? window.location.origin : "http://SERVER:3000"}" -EnrollmentToken "${token}"`)}>
+                      <Terminal className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <p className="text-xs text-muted-foreground">Kein Token vorhanden — erst generieren.</p>
+              )}
+              <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={handleRegenToken} disabled={isPending}>
+                {isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                {token ? "Neu generieren" : "Token erstellen"}
               </Button>
-            </div>
-          )}
-
-          {newKey && (
-            <div className="rounded-lg border border-yellow-400/20 bg-yellow-400/5 p-3 text-xs space-y-1">
-              <p className="flex items-center gap-1 text-yellow-400 font-semibold"><Key className="h-3.5 w-3.5" /> API-Key (einmalig sichtbar)</p>
-              <p className="font-mono break-all text-foreground">{newKey}</p>
-              <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => setNewKey(null)}>Schließen</Button>
             </div>
           )}
 
