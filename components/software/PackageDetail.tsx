@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Play, Trash2, CheckCircle2, XCircle, Clock, Loader2, Package, X, Pencil } from "lucide-react";
+import { ArrowLeft, Play, Trash2, CheckCircle2, XCircle, Clock, Loader2, Package, X, Pencil, Folder, Monitor } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -11,9 +11,10 @@ import { createJobAction, cancelJobAction, deletePackageAction, updatePackageAct
 import { toast } from "sonner";
 import type { JobStatus } from "@prisma/client";
 
-type Pkg = { id: string; name: string; version: string | null; type: string; wingetId: string | null; installParams: string | null; description: string | null };
-type Agent = { id: string; hostname: string; ipAddress: string | null; lastSeenAt: Date | null };
-type Job = { id: string; status: JobStatus; createdAt: Date; exitCode: number | null; log: string | null; agent: { id: string; hostname: string } };
+type Pkg   = { id: string; name: string; version: string | null; type: string; wingetId: string | null; installParams: string | null; description: string | null };
+type Agent = { id: string; hostname: string; ipAddress: string | null; lastSeenAt: Date | null; asset: { name: string } | null };
+type Group = { id: string; name: string; _count: { members: number }; members: { agentId: string }[] };
+type Job   = { id: string; status: JobStatus; createdAt: Date; exitCode: number | null; log: string | null; agent: { id: string; hostname: string } };
 
 const JOB_COLOR: Record<JobStatus, string> = {
   PENDING: "text-muted-foreground bg-muted",
@@ -26,32 +27,51 @@ const JOB_LABEL: Record<JobStatus, string> = {
   PENDING: "Ausstehend", RUNNING: "Läuft", SUCCESS: "Erfolgreich", FAILED: "Fehlgeschlagen", CANCELLED: "Abgebrochen",
 };
 
-export function PackageDetail({ pkg, agents, jobs, isAdmin }: {
-  pkg: Pkg; agents: Agent[]; jobs: Job[]; isAdmin: boolean;
+function displayName(a: Agent) { return a.asset?.name ?? a.hostname; }
+
+export function PackageDetail({ pkg, agents, groups, jobs, isAdmin }: {
+  pkg: Pkg; agents: Agent[]; groups: Group[]; jobs: Job[]; isAdmin: boolean;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [selectedAgents, setSelectedAgents] = useState<Set<string>>(new Set());
   const [showDeploy, setShowDeploy] = useState(false);
+  const [deployTab, setDeployTab] = useState<"pcs" | "group">("pcs");
+  const [selectedAgents, setSelectedAgents] = useState<Set<string>>(new Set());
+  const [selectedGroupId, setSelectedGroupId] = useState<string>("");
+  const [copyOnly, setCopyOnly] = useState(false);
+  const [expandedJob, setExpandedJob] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [editData, setEditData] = useState({
-    name:           pkg.name,
-    version:        pkg.version ?? "",
-    wingetId:       pkg.wingetId ?? "",
-    installParams:  pkg.installParams ?? "",
-    description:    pkg.description ?? "",
+    name:          pkg.name,
+    version:       pkg.version ?? "",
+    wingetId:      pkg.wingetId ?? "",
+    installParams: pkg.installParams ?? "",
+    description:   pkg.description ?? "",
   });
+
+  const isFilePkg = pkg.type === "file";
 
   const toggleAgent = (id: string) =>
     setSelectedAgents((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
+  const deployCount = deployTab === "group"
+    ? (groups.find((g) => g.id === selectedGroupId)?._count.members ?? 0)
+    : selectedAgents.size;
+
   const handleDeploy = () => {
-    if (!selectedAgents.size) { toast.error("Mindestens einen PC auswählen"); return; }
+    if (deployTab === "pcs" && !selectedAgents.size) { toast.error("Mindestens einen PC auswählen"); return; }
+    if (deployTab === "group" && !selectedGroupId) { toast.error("Gruppe auswählen"); return; }
     startTransition(async () => {
-      const r = await createJobAction({ packageId: pkg.id, agentIds: [...selectedAgents] });
+      const r = await createJobAction({
+        packageId:    pkg.id,
+        agentIds:     deployTab === "pcs" ? [...selectedAgents] : [],
+        groupId:      deployTab === "group" ? selectedGroupId : undefined,
+        overrideType: (isFilePkg && copyOnly) ? "file_copy" : undefined,
+      });
       if (r.error) { toast.error(r.error); return; }
-      toast.success(`${selectedAgents.size} Job(s) erstellt`);
+      toast.success(`${deployCount} Job(s) erstellt${copyOnly ? " (nur kopieren)" : ""}`);
       setSelectedAgents(new Set());
+      setSelectedGroupId("");
       setShowDeploy(false);
       router.refresh();
     });
@@ -60,11 +80,11 @@ export function PackageDetail({ pkg, agents, jobs, isAdmin }: {
   const handleSave = () => {
     startTransition(async () => {
       const r = await updatePackageAction(pkg.id, {
-        name:           editData.name.trim() || undefined,
-        version:        editData.version.trim() || null,
-        wingetId:       editData.wingetId.trim() || null,
-        installParams:  editData.installParams.trim() || null,
-        description:    editData.description.trim() || null,
+        name:          editData.name.trim() || undefined,
+        version:       editData.version.trim() || null,
+        wingetId:      editData.wingetId.trim() || null,
+        installParams: editData.installParams.trim() || null,
+        description:   editData.description.trim() || null,
       });
       if (r.error) { toast.error(r.error); return; }
       toast.success("Gespeichert");
@@ -140,7 +160,7 @@ export function PackageDetail({ pkg, agents, jobs, isAdmin }: {
               )}
               <div className="space-y-1 col-span-2">
                 <label className="text-xs text-muted-foreground">Installations-Parameter</label>
-                <Input value={editData.installParams} onChange={(e) => setEditData((d) => ({ ...d, installParams: e.target.value }))} className="h-8 text-xs font-mono" placeholder="z.B. --source winget --silent" />
+                <Input value={editData.installParams} onChange={(e) => setEditData((d) => ({ ...d, installParams: e.target.value }))} className="h-8 text-xs font-mono" />
               </div>
               <div className="space-y-1 col-span-2">
                 <label className="text-xs text-muted-foreground">Beschreibung</label>
@@ -149,8 +169,7 @@ export function PackageDetail({ pkg, agents, jobs, isAdmin }: {
             </div>
             <div className="flex gap-2">
               <Button size="sm" onClick={handleSave} disabled={isPending}>
-                {isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                Speichern
+                {isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Speichern
               </Button>
               <Button size="sm" variant="ghost" onClick={() => { setEditing(false); setEditData({ name: pkg.name, version: pkg.version ?? "", wingetId: pkg.wingetId ?? "", installParams: pkg.installParams ?? "", description: pkg.description ?? "" }); }}>
                 Abbrechen
@@ -181,24 +200,69 @@ export function PackageDetail({ pkg, agents, jobs, isAdmin }: {
                 <X className="h-4 w-4" />
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground">PCs auswählen die das Paket erhalten sollen:</p>
-            <div className="space-y-1.5 max-h-60 overflow-y-auto">
-              {agents.length === 0
-                ? <p className="text-xs text-muted-foreground">Keine PCs registriert</p>
-                : agents.map((a) => (
-                    <label key={a.id} className="flex items-center gap-2.5 rounded-md px-3 py-2 hover:bg-muted cursor-pointer text-sm">
-                      <input type="checkbox" checked={selectedAgents.has(a.id)} onChange={() => toggleAgent(a.id)} className="rounded" />
-                      <span className="font-medium text-foreground">{a.hostname}</span>
-                      <span className="text-muted-foreground text-xs">{a.ipAddress}</span>
-                    </label>
-                  ))
-              }
+
+            {/* Tabs: PCs / Gruppe */}
+            <div className="flex rounded-lg border border-border overflow-hidden text-xs">
+              <button onClick={() => setDeployTab("pcs")}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2 transition-colors ${deployTab === "pcs" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}>
+                <Monitor className="h-3.5 w-3.5" /> Einzelne PCs
+              </button>
+              <button onClick={() => setDeployTab("group")}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2 border-l border-border transition-colors ${deployTab === "group" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}>
+                <Folder className="h-3.5 w-3.5" /> Gruppe
+              </button>
             </div>
+
+            {deployTab === "pcs" && (
+              <div className="space-y-1.5 max-h-56 overflow-y-auto">
+                {agents.length === 0
+                  ? <p className="text-xs text-muted-foreground">Keine PCs registriert</p>
+                  : agents.map((a) => (
+                      <label key={a.id} className="flex items-center gap-2.5 rounded-md px-3 py-2 hover:bg-muted cursor-pointer text-sm">
+                        <input type="checkbox" checked={selectedAgents.has(a.id)} onChange={() => toggleAgent(a.id)} className="rounded" />
+                        <div className="min-w-0">
+                          <p className="font-medium text-foreground truncate">{displayName(a)}</p>
+                          {a.asset && <p className="text-xs text-muted-foreground truncate">{a.hostname}</p>}
+                        </div>
+                        <span className="text-muted-foreground text-xs ml-auto shrink-0">{a.ipAddress}</span>
+                      </label>
+                    ))
+                }
+              </div>
+            )}
+
+            {deployTab === "group" && (
+              <div className="space-y-1.5">
+                {groups.length === 0
+                  ? <p className="text-xs text-muted-foreground">Keine Gruppen vorhanden — zuerst auf der Software-Seite erstellen.</p>
+                  : groups.map((g) => (
+                      <label key={g.id} className="flex items-center gap-2.5 rounded-md px-3 py-2 hover:bg-muted cursor-pointer text-sm">
+                        <input type="radio" name="group" value={g.id} checked={selectedGroupId === g.id}
+                          onChange={() => setSelectedGroupId(g.id)} className="rounded-full" />
+                        <span className="font-medium text-foreground">{g.name}</span>
+                        <span className="text-xs text-muted-foreground ml-auto">{g._count.members} PCs</span>
+                      </label>
+                    ))
+                }
+              </div>
+            )}
+
+            {/* Copy-only toggle for file packages */}
+            {isFilePkg && (
+              <label className="flex items-center gap-2.5 rounded-md border border-border px-3 py-2.5 cursor-pointer hover:bg-muted transition-colors">
+                <input type="checkbox" checked={copyOnly} onChange={(e) => setCopyOnly(e.target.checked)} className="rounded" />
+                <div>
+                  <p className="text-sm font-medium text-foreground">Nur kopieren (nicht installieren)</p>
+                  <p className="text-xs text-muted-foreground">Datei wird nach C:\Temp\KanbanFlow\ übertragen, aber nicht ausgeführt</p>
+                </div>
+              </label>
+            )}
+
             <div className="flex gap-2 justify-end">
               <Button variant="outline" size="sm" onClick={() => setShowDeploy(false)}>Abbrechen</Button>
-              <Button size="sm" onClick={handleDeploy} disabled={isPending || !selectedAgents.size}>
+              <Button size="sm" onClick={handleDeploy} disabled={isPending || deployCount === 0}>
                 {isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                {selectedAgents.size} PC(s) auswählen
+                {deployCount > 0 ? `${deployCount} PC${deployCount !== 1 ? "s" : ""}${copyOnly ? " kopieren" : " installieren"}` : "Auswahl treffen"}
               </Button>
             </div>
           </div>
@@ -217,38 +281,42 @@ export function PackageDetail({ pkg, agents, jobs, isAdmin }: {
             <table className="w-full text-xs">
               <thead className="bg-muted/50">
                 <tr className="border-b border-border">
-                  <th className="px-3 py-2 text-left font-semibold text-muted-foreground">PC</th>
-                  <th className="px-3 py-2 text-left font-semibold text-muted-foreground">Status</th>
-                  <th className="px-3 py-2 text-left font-semibold text-muted-foreground hidden sm:table-cell">Erstellt</th>
-                  <th className="px-3 py-2 text-left font-semibold text-muted-foreground hidden md:table-cell">Exit-Code</th>
-                  <th className="px-3 py-2 w-8" />
+                  <th className="text-left px-4 py-2 font-medium text-muted-foreground">PC</th>
+                  <th className="text-left px-4 py-2 font-medium text-muted-foreground">Status</th>
+                  <th className="text-left px-4 py-2 font-medium text-muted-foreground">Erstellt</th>
+                  <th className="px-4 py-2" />
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border">
+              <tbody>
                 {jobs.map((j) => (
-                  <tr key={j.id} className="hover:bg-muted/20">
-                    <td className="px-3 py-2.5 font-medium text-foreground">{j.agent.hostname}</td>
-                    <td className="px-3 py-2.5">
-                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${JOB_COLOR[j.status]}`}>
-                        {j.status === "SUCCESS" && <CheckCircle2 className="h-3 w-3" />}
-                        {j.status === "FAILED" && <XCircle className="h-3 w-3" />}
-                        {JOB_LABEL[j.status]}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2.5 text-muted-foreground hidden sm:table-cell">
-                      {new Date(j.createdAt).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
-                    </td>
-                    <td className="px-3 py-2.5 font-mono text-muted-foreground hidden md:table-cell">
-                      {j.exitCode !== null ? j.exitCode : "—"}
-                    </td>
-                    <td className="px-3 py-2.5">
-                      {j.status === "PENDING" && isAdmin && (
-                        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => handleCancel(j.id)}>
-                          <X className="h-3.5 w-3.5 text-muted-foreground" />
-                        </Button>
-                      )}
-                    </td>
-                  </tr>
+                  <>
+                    <tr key={j.id} className="border-t border-border hover:bg-muted/30 cursor-pointer"
+                      onClick={() => setExpandedJob(expandedJob === j.id ? null : j.id)}>
+                      <td className="px-4 py-2.5 font-medium text-foreground">{j.agent.hostname}</td>
+                      <td className="px-4 py-2.5">
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${JOB_COLOR[j.status]}`}>
+                          {JOB_LABEL[j.status]}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5 text-muted-foreground">
+                        {new Date(j.createdAt).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                      </td>
+                      <td className="px-4 py-2.5 text-right">
+                        {j.status === "PENDING" && (
+                          <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={(e) => { e.stopPropagation(); handleCancel(j.id); }}>
+                            Abbrechen
+                          </Button>
+                        )}
+                      </td>
+                    </tr>
+                    {expandedJob === j.id && j.log && (
+                      <tr key={`${j.id}-log`} className="border-t border-border bg-muted/20">
+                        <td colSpan={4} className="px-4 py-3">
+                          <pre className="text-[10px] font-mono text-muted-foreground whitespace-pre-wrap overflow-x-auto max-h-48 overflow-y-auto">{j.log}</pre>
+                        </td>
+                      </tr>
+                    )}
+                  </>
                 ))}
               </tbody>
             </table>

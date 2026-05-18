@@ -100,6 +100,7 @@ model Organization {
   assets            Asset[]
   softwarePackages  SoftwarePackage[]
   softwareAgents    SoftwareAgent[]
+  agentGroups       AgentGroup[]
 
   @@map("organizations")
 }
@@ -625,11 +626,12 @@ model Asset {
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
-  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  category     AssetCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  location     AssetLocation? @relation(fields: [locationId], references: [id], onDelete: SetNull)
-  assignedTo   User?          @relation("AssetAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
-  assignments  AssetAssignment[]
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  category       AssetCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  location       AssetLocation? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  assignedTo     User?          @relation("AssetAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  assignments    AssetAssignment[]
+  softwareAgent  SoftwareAgent?
 
   @@index([organizationId, status])
   @@index([organizationId, categoryId])
@@ -702,15 +704,17 @@ model SoftwareAgent {
   ramGb          Int?
   diskGb         Int?
   domain         String?
-  assetId           String?   // linked inventory asset
+  assetId           String?   @unique // linked inventory asset (1:1)
   agentVersion      String?
   installedSoftware Json?
   apiKey            String    @unique @default(cuid())
   lastSeenAt     DateTime?
   createdAt      DateTime  @default(now())
 
-  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  asset        Asset?              @relation(fields: [assetId], references: [id], onDelete: SetNull)
   jobs         SoftwareJob[]
+  groups       AgentGroupMember[]
 
   @@unique([organizationId, hostname])
   @@index([organizationId])
@@ -721,6 +725,7 @@ model SoftwareJob {
   id          String    @id @default(cuid())
   packageId   String
   agentId     String
+  jobType     String?   // overrides package.type if set (e.g. "file_copy")
   status      JobStatus @default(PENDING)
   exitCode    Int?
   log         String?   @db.Text
@@ -893,4 +898,32 @@ model PersonalChecklistSubItem {
   item PersonalChecklistItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
 
   @@map("personal_checklist_sub_items")
+}
+
+// ── Agent Groups ────────────────────────────────────────────────────────────
+
+model AgentGroup {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  description    String?
+  createdAt      DateTime @default(now())
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  members      AgentGroupMember[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+  @@map("agent_groups")
+}
+
+model AgentGroupMember {
+  groupId String
+  agentId String
+
+  group AgentGroup    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  agent SoftwareAgent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, agentId])
+  @@map("agent_group_members")
 }

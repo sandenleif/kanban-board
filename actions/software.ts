@@ -106,24 +106,90 @@ export async function deleteAgentAction(id: string): Promise<ActionResult> {
 // ── Jobs ──────────────────────────────────────────────────────────────────
 
 export async function createJobAction(data: {
-  packageId: string; agentIds: string[]; scheduledAt?: string;
+  packageId: string;
+  agentIds?: string[];
+  groupId?: string;
+  overrideType?: string;
+  scheduledAt?: string;
 }): Promise<ActionResult> {
   const { organizationId } = await requireAdmin();
 
-  if (!data.packageId || !data.agentIds.length) return { error: "Paket und mindestens ein PC erforderlich" };
+  if (!data.packageId) return { error: "Paket erforderlich" };
 
-  // Verify package belongs to org
   const pkg = await prisma.softwarePackage.findFirst({ where: { id: data.packageId, organizationId } });
   if (!pkg) return { error: "Paket nicht gefunden" };
 
+  let agentIds = data.agentIds ?? [];
+
+  if (data.groupId) {
+    const members = await prisma.agentGroupMember.findMany({
+      where: { groupId: data.groupId, group: { organizationId } },
+      select: { agentId: true },
+    });
+    agentIds = [...new Set([...agentIds, ...members.map((m) => m.agentId)])];
+  }
+
+  if (!agentIds.length) return { error: "Mindestens ein PC oder eine Gruppe erforderlich" };
+
+  const validAgents = await prisma.softwareAgent.findMany({
+    where: { id: { in: agentIds }, organizationId },
+    select: { id: true },
+  });
+
   await prisma.softwareJob.createMany({
-    data: data.agentIds.map((agentId) => ({
-      packageId: data.packageId,
-      agentId,
-      status: "PENDING",
+    data: validAgents.map((a) => ({
+      packageId:   data.packageId,
+      agentId:     a.id,
+      jobType:     data.overrideType ?? null,
+      status:      "PENDING",
       scheduledAt: data.scheduledAt ? new Date(data.scheduledAt) : null,
     })),
   });
+
+  revalidatePath("/software");
+  return { success: true };
+}
+
+// ── Agent Groups ──────────────────────────────────────────────────────────
+
+export async function createGroupAction(name: string): Promise<ActionResult & { id?: string }> {
+  const { organizationId } = await requireAdmin();
+  if (!name?.trim()) return { error: "Name erforderlich" };
+  try {
+    const group = await prisma.agentGroup.create({
+      data: { organizationId, name: name.trim() },
+    });
+    revalidatePath("/software");
+    return { success: true, id: group.id };
+  } catch {
+    return { error: "Gruppe existiert bereits" };
+  }
+}
+
+export async function deleteGroupAction(id: string): Promise<ActionResult> {
+  const { organizationId } = await requireAdmin();
+  await prisma.agentGroup.deleteMany({ where: { id, organizationId } });
+  revalidatePath("/software");
+  return { success: true };
+}
+
+export async function setAgentGroupsAction(agentId: string, groupIds: string[]): Promise<ActionResult> {
+  const { organizationId } = await requireAdmin();
+  const agent = await prisma.softwareAgent.findFirst({ where: { id: agentId, organizationId } });
+  if (!agent) return { error: "PC nicht gefunden" };
+
+  // Verify groups belong to org
+  const validGroups = await prisma.agentGroup.findMany({
+    where: { id: { in: groupIds }, organizationId },
+    select: { id: true },
+  });
+
+  await prisma.$transaction([
+    prisma.agentGroupMember.deleteMany({ where: { agentId } }),
+    prisma.agentGroupMember.createMany({
+      data: validGroups.map((g) => ({ groupId: g.id, agentId })),
+    }),
+  ]);
 
   revalidatePath("/software");
   return { success: true };

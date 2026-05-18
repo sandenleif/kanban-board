@@ -37,7 +37,6 @@ export async function GET(req: NextRequest) {
           id: true, name: true, type: true, version: true,
           wingetId: true, installParams: true,
           fileName: true, fileMimeType: true,
-          // Don't send fileData here — agent fetches separately to avoid huge payloads
         },
       },
     },
@@ -54,11 +53,12 @@ export async function GET(req: NextRequest) {
   }
 
   return NextResponse.json(jobs.map((j) => {
-    const isUpdate = j.package.type === "agent_update";
+    const effectiveType = j.jobType ?? j.package.type;
+    const isUpdate = effectiveType === "agent_update";
     return {
       jobId:    j.id,
       name:     j.package.name,
-      type:     j.package.type,
+      type:     effectiveType,
       wingetId: j.package.wingetId,
       params:   isUpdate ? null : j.package.installParams,
       fileName: j.package.fileName,

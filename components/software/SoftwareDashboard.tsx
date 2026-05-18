@@ -3,15 +3,22 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Plus, MonitorSmartphone, Package, CheckCircle2, XCircle, Clock, Loader2, Trash2, Key, Wifi, WifiOff, RefreshCw, Copy, Terminal, Download } from "lucide-react";
+import { Plus, MonitorSmartphone, Package, CheckCircle2, XCircle, Clock, Loader2, Trash2, Key,
+         Wifi, WifiOff, RefreshCw, Copy, Terminal, Download, FolderPlus, Folder, X, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { deleteAgentAction, pushAgentUpdateAction } from "@/actions/software";
+import { Input } from "@/components/ui/input";
+import { deleteAgentAction, pushAgentUpdateAction, createGroupAction, deleteGroupAction, setAgentGroupsAction } from "@/actions/software";
 import { regenerateEnrollmentTokenAction } from "@/actions/settings";
 import { toast } from "sonner";
 import type { JobStatus } from "@prisma/client";
 
 type Pkg   = { id: string; name: string; version: string | null; type: string; _count: { jobs: number } };
-type Agent = { id: string; hostname: string; ipAddress: string | null; lastSeenAt: Date | null; agentVersion: string | null; _count: { jobs: number } };
+type Agent = {
+  id: string; hostname: string; ipAddress: string | null; lastSeenAt: Date | null;
+  agentVersion: string | null; asset: { name: string } | null;
+  groups: { groupId: string }[]; _count: { jobs: number }
+};
+type Group = { id: string; name: string; _count: { members: number } };
 type Job   = { id: string; status: JobStatus; createdAt: Date; package: { id: string; name: string }; agent: { id: string; hostname: string } };
 
 const JOB_COLOR: Record<JobStatus, string> = {
@@ -27,12 +34,18 @@ function isOnline(lastSeenAt: Date | null) {
   return Date.now() - new Date(lastSeenAt).getTime() < 5 * 60 * 1000;
 }
 
-export function SoftwareDashboard({ packages, agents, recentJobs, isAdmin, enrollmentToken: initialToken }: {
-  packages: Pkg[]; agents: Agent[]; recentJobs: Job[]; isAdmin: boolean; enrollmentToken: string | null;
+function displayName(a: Agent) {
+  return a.asset?.name ?? a.hostname;
+}
+
+export function SoftwareDashboard({ packages, agents, groups, recentJobs, isAdmin, enrollmentToken: initialToken }: {
+  packages: Pkg[]; agents: Agent[]; groups: Group[]; recentJobs: Job[]; isAdmin: boolean; enrollmentToken: string | null;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [token, setToken] = useState(initialToken);
+  const [newGroupName, setNewGroupName] = useState("");
+  const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
 
   const handleRegenToken = () => {
     if (!confirm("Neuen Enrollment-Token generieren? Alle PCs müssen danach neu eingerichtet werden.")) return;
@@ -48,8 +61,8 @@ export function SoftwareDashboard({ packages, agents, recentJobs, isAdmin, enrol
     navigator.clipboard.writeText(text).then(() => toast.success("Kopiert"));
   };
 
-  const handleDeleteAgent = (id: string, hostname: string) => {
-    if (!confirm(`PC "${hostname}" wirklich entfernen?`)) return;
+  const handleDeleteAgent = (id: string, name: string) => {
+    if (!confirm(`PC "${name}" wirklich entfernen?`)) return;
     startTransition(async () => {
       const r = await deleteAgentAction(id);
       if (r.error) toast.error(r.error);
@@ -57,21 +70,51 @@ export function SoftwareDashboard({ packages, agents, recentJobs, isAdmin, enrol
     });
   };
 
-  const handleUpdateAgent = (id: string, hostname: string) => {
-    if (!confirm(`Agent auf "${hostname}" aktualisieren?`)) return;
+  const handleUpdateAgent = (id: string, name: string) => {
+    if (!confirm(`Agent auf "${name}" aktualisieren?`)) return;
     startTransition(async () => {
       const r = await pushAgentUpdateAction([id]);
       if (r.error) toast.error(r.error);
-      else { toast.success("Update-Job erstellt — wird beim nächsten Tick ausgeführt"); router.refresh(); }
+      else { toast.success("Update-Job erstellt"); router.refresh(); }
     });
   };
 
-  const handleUpdateAll = (agentList: Agent[]) => {
-    if (!confirm(`Agent auf allen ${agentList.length} PCs aktualisieren?`)) return;
+  const handleUpdateAll = () => {
+    if (!confirm(`Agent auf allen ${agents.length} PCs aktualisieren?`)) return;
     startTransition(async () => {
-      const r = await pushAgentUpdateAction(agentList.map((a) => a.id));
+      const r = await pushAgentUpdateAction(agents.map((a) => a.id));
       if (r.error) toast.error(r.error);
       else { toast.success(`${r.jobCount} Update-Jobs erstellt`); router.refresh(); }
+    });
+  };
+
+  const handleCreateGroup = () => {
+    if (!newGroupName.trim()) return;
+    startTransition(async () => {
+      const r = await createGroupAction(newGroupName.trim());
+      if (r.error) toast.error(r.error);
+      else { setNewGroupName(""); toast.success("Gruppe erstellt"); router.refresh(); }
+    });
+  };
+
+  const handleDeleteGroup = (id: string, name: string) => {
+    if (!confirm(`Gruppe "${name}" löschen?`)) return;
+    startTransition(async () => {
+      const r = await deleteGroupAction(id);
+      if (r.error) toast.error(r.error);
+      else { toast.success("Gruppe gelöscht"); router.refresh(); }
+    });
+  };
+
+  const handleToggleAgentGroup = (agent: Agent, groupId: string) => {
+    const current = agent.groups.map((g) => g.groupId);
+    const next = current.includes(groupId)
+      ? current.filter((id) => id !== groupId)
+      : [...current, groupId];
+    startTransition(async () => {
+      const r = await setAgentGroupsAction(agent.id, next);
+      if (r.error) toast.error(r.error);
+      else router.refresh();
     });
   };
 
@@ -100,7 +143,7 @@ export function SoftwareDashboard({ packages, agents, recentJobs, isAdmin, enrol
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-medium text-foreground">{p.name}</p>
-                      <p className="text-xs text-muted-foreground">{p.type === "winget" ? "winget" : "Datei"}{p.version ? ` · v${p.version}` : ""}</p>
+                      <p className="text-xs text-muted-foreground">{p.type}{p.version ? ` · v${p.version}` : ""}</p>
                     </div>
                     <span className="text-xs text-muted-foreground">{p._count.jobs} Jobs</span>
                   </div>
@@ -110,21 +153,10 @@ export function SoftwareDashboard({ packages, agents, recentJobs, isAdmin, enrol
           )}
         </div>
 
-        {/* Agents */}
-        <div className="lg:col-span-1 space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
-              <MonitorSmartphone className="h-4 w-4 text-primary" /> PCs ({agents.length})
-            </h2>
-            {isAdmin && agents.length > 0 && (
-              <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5"
-                onClick={() => handleUpdateAll(agents)} disabled={isPending}>
-                {isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
-                Alle aktualisieren
-              </Button>
-            )}
-          </div>
+        {/* PCs + Groups */}
+        <div className="lg:col-span-1 space-y-4">
 
+          {/* Enrollment token */}
           {isAdmin && (
             <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-2.5">
               <p className="text-xs font-semibold text-foreground flex items-center gap-1.5">
@@ -159,37 +191,108 @@ export function SoftwareDashboard({ packages, agents, recentJobs, isAdmin, enrol
             </div>
           )}
 
-          <div className="space-y-2">
-            {agents.map((a) => {
-              const online = isOnline(a.lastSeenAt);
-              return (
-                <div key={a.id} className="rounded-lg border border-border bg-card px-3 py-2.5 flex items-center justify-between">
-                  <div className="flex items-center gap-2 min-w-0">
-                    {online ? <Wifi className="h-3.5 w-3.5 text-green-400 shrink-0" /> : <WifiOff className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" />}
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">{a.hostname}</p>
-                      <p className="text-xs text-muted-foreground truncate">
-                        {a.ipAddress ?? "—"} · {a._count.jobs} Jobs
-                        {a.agentVersion && <span className="ml-1 text-muted-foreground/60">· v{a.agentVersion}</span>}
-                      </p>
+          {/* Agents */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <MonitorSmartphone className="h-4 w-4 text-primary" /> PCs ({agents.length})
+              </h2>
+              {isAdmin && agents.length > 0 && (
+                <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={handleUpdateAll} disabled={isPending}>
+                  {isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
+                  Alle aktualisieren
+                </Button>
+              )}
+            </div>
+            <div className="space-y-2">
+              {agents.map((a) => {
+                const online = isOnline(a.lastSeenAt);
+                const name   = displayName(a);
+                return (
+                  <div key={a.id} className="rounded-lg border border-border bg-card px-3 py-2.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 min-w-0">
+                        {online ? <Wifi className="h-3.5 w-3.5 text-green-400 shrink-0" /> : <WifiOff className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" />}
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-foreground truncate">{name}</p>
+                          <p className="text-xs text-muted-foreground truncate">
+                            {a.hostname}{a.hostname !== name ? "" : ""} · {a.ipAddress ?? "—"}
+                            {a.agentVersion && <span className="ml-1 text-muted-foreground/60">· v{a.agentVersion}</span>}
+                          </p>
+                        </div>
+                      </div>
+                      {isAdmin && (
+                        <div className="flex items-center gap-1 shrink-0 ml-2">
+                          <Button size="icon" variant="ghost" className="h-7 w-7" title="Gruppen zuweisen"
+                            onClick={() => setEditingGroupId(editingGroupId === a.id ? null : a.id)} disabled={isPending}>
+                            <Folder className={`h-3.5 w-3.5 ${a.groups.length > 0 ? "text-primary" : "text-muted-foreground"}`} />
+                          </Button>
+                          <Button size="icon" variant="ghost" className="h-7 w-7" title="Agent aktualisieren"
+                            onClick={() => handleUpdateAgent(a.id, name)} disabled={isPending}>
+                            <Download className="h-3.5 w-3.5 text-muted-foreground" />
+                          </Button>
+                          <Button size="icon" variant="ghost" className="h-7 w-7" title="PC entfernen"
+                            onClick={() => handleDeleteAgent(a.id, name)} disabled={isPending}>
+                            <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                          </Button>
+                        </div>
+                      )}
                     </div>
+                    {/* Group assignment popover */}
+                    {editingGroupId === a.id && groups.length > 0 && (
+                      <div className="mt-2 pt-2 border-t border-border space-y-1">
+                        <p className="text-[10px] text-muted-foreground font-medium">Gruppen:</p>
+                        {groups.map((g) => {
+                          const inGroup = a.groups.some((m) => m.groupId === g.id);
+                          return (
+                            <button key={g.id}
+                              onClick={() => handleToggleAgentGroup(a, g.id)}
+                              className="flex items-center gap-2 w-full text-xs rounded px-2 py-1 hover:bg-muted transition-colors text-left">
+                              <span className={`h-3.5 w-3.5 shrink-0 rounded border flex items-center justify-center ${inGroup ? "bg-primary border-primary" : "border-border"}`}>
+                                {inGroup && <Check className="h-2.5 w-2.5 text-primary-foreground" />}
+                              </span>
+                              {g.name}
+                            </button>
+                          );
+                        })}
+                        {groups.length === 0 && <p className="text-xs text-muted-foreground">Keine Gruppen — unten erstellen.</p>}
+                      </div>
+                    )}
                   </div>
-                  {isAdmin && (
-                    <div className="flex items-center gap-1 shrink-0 ml-2">
-                      <Button size="icon" variant="ghost" className="h-7 w-7" title="Agent aktualisieren"
-                        onClick={() => handleUpdateAgent(a.id, a.hostname)} disabled={isPending}>
-                        <Download className="h-3.5 w-3.5 text-muted-foreground" />
-                      </Button>
-                      <Button size="icon" variant="ghost" className="h-7 w-7" title="PC entfernen"
-                        onClick={() => handleDeleteAgent(a.id, a.hostname)} disabled={isPending}>
-                        <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+                );
+              })}
+              {agents.length === 0 && <p className="text-xs text-muted-foreground">Noch keine PCs registriert.</p>}
+            </div>
           </div>
+
+          {/* Groups */}
+          {isAdmin && (
+            <div className="space-y-3">
+              <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <Folder className="h-4 w-4 text-primary" /> Gruppen ({groups.length})
+              </h2>
+              <div className="space-y-1.5">
+                {groups.map((g) => (
+                  <div key={g.id} className="rounded-lg border border-border bg-card px-3 py-2 flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-foreground">{g.name}</p>
+                      <p className="text-xs text-muted-foreground">{g._count.members} PCs</p>
+                    </div>
+                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleDeleteGroup(g.id, g.name)} disabled={isPending}>
+                      <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <Input placeholder="Gruppenname…" value={newGroupName} onChange={(e) => setNewGroupName(e.target.value)}
+                  className="h-8 text-sm" onKeyDown={(e) => e.key === "Enter" && handleCreateGroup()} />
+                <Button size="sm" variant="outline" className="h-8 gap-1.5 shrink-0" onClick={handleCreateGroup} disabled={isPending || !newGroupName.trim()}>
+                  <FolderPlus className="h-3.5 w-3.5" /> Erstellen
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Recent jobs */}

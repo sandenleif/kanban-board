@@ -30,7 +30,7 @@ param(
 # ============================================================
 
 # Agent-Version - bei jedem Update erhoehen
-$AgentVersion    = "1.1.0"
+$AgentVersion    = "1.2.0"
 
 # Freie PowerShell-Scripts vom Server: STANDARDMAESSIG DEAKTIVIERT
 # Sicherheitshinweis: Der Agent laeuft als SYSTEM. Beliebige Remote-Scripts
@@ -41,6 +41,7 @@ $AllowRemoteScripts = $false
 $AllowedJobTypes = @(
     "winget_install",
     "file_install",
+    "file_copy",
     "restart_service",
     "collect_inventory",
     "agent_update",
@@ -58,6 +59,7 @@ $JobTimeouts = @{
     "winget"              = 1200
     "file_install"        = 1200
     "file"                = 1200
+    "file_copy"           = 600   # 10 Minuten (nur Download)
     "restart_service"     = 120   # 2 Minuten
     "collect_inventory"   = 120
     "agent_update"        = 300   # 5 Minuten
@@ -532,6 +534,35 @@ function Invoke-JobExecution {
                 $exitCode = $result.ExitCode
 
                 Remove-Item $dest -Force -ErrorAction SilentlyContinue
+            }
+
+            # --------------------------------------------------
+            # Datei nur kopieren (NICHT ausfuehren) - fuer Tests
+            # --------------------------------------------------
+            "file_copy" {
+                if (-not $Job.fileUrl) { throw "Keine fileUrl angegeben" }
+
+                $fname = if ($Job.fileName) { $Job.fileName } else { "file.bin" }
+                if (-not (Test-Path $TempDir)) { New-Item -ItemType Directory -Path $TempDir -Force | Out-Null }
+                $dest = "$TempDir\$fname"
+
+                $fullUrl = "$ServerUrl$($Job.fileUrl)"
+                $log.AppendLine("Lade herunter (nur kopieren): $fullUrl") | Out-Null
+
+                $headers = New-AgentHeaders -ApiKey $ApiKey
+                Invoke-WebRequest -Uri $fullUrl -OutFile $dest -Headers $headers -UseBasicParsing -TimeoutSec 600
+                $log.AppendLine("Gespeichert: $dest") | Out-Null
+
+                if ($Job.sha256) {
+                    if (-not (Test-AgentPackageTrust -FilePath $dest -ExpectedSha256 $Job.sha256)) {
+                        Remove-Item $dest -Force -ErrorAction SilentlyContinue
+                        throw "SHA256-Pruefung fehlgeschlagen"
+                    }
+                }
+
+                $size = [Math]::Round((Get-Item $dest).Length / 1MB, 2)
+                $log.AppendLine("OK - $size MB gespeichert. Datei wird NICHT ausgefuehrt.") | Out-Null
+                $exitCode = 0
             }
 
             # --------------------------------------------------

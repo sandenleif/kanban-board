@@ -13,14 +13,24 @@ export default async function PackageDetailPage({ params }: { params: Promise<{ 
     select: { organizationId: true, isAdmin: true },
   });
   if (!user?.organizationId) notFound();
+  const orgId = user.organizationId;
 
-  const [pkg, agents, jobs] = await Promise.all([
+  const [pkg, agents, groups, jobs] = await Promise.all([
     prisma.softwarePackage.findFirst({
-      where: { id: packageId, organizationId: user.organizationId },
+      where: { id: packageId, organizationId: orgId },
     }),
     prisma.softwareAgent.findMany({
-      where: { organizationId: user.organizationId },
+      where: { organizationId: orgId },
+      include: { asset: { select: { name: true } } },
       orderBy: { hostname: "asc" },
+    }),
+    prisma.agentGroup.findMany({
+      where: { organizationId: orgId },
+      include: {
+        _count: { select: { members: true } },
+        members: { select: { agentId: true } },
+      },
+      orderBy: { name: "asc" },
     }),
     prisma.softwareJob.findMany({
       where: { packageId },
@@ -31,5 +41,5 @@ export default async function PackageDetailPage({ params }: { params: Promise<{ 
   ]);
   if (!pkg) notFound();
 
-  return <PackageDetail pkg={pkg} agents={agents} jobs={jobs} isAdmin={user.isAdmin} />;
+  return <PackageDetail pkg={pkg} agents={agents} groups={groups} jobs={jobs} isAdmin={user.isAdmin} />;
 }

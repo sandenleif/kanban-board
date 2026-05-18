@@ -14,7 +14,7 @@ export default async function SoftwarePage() {
   if (!user?.organizationId) notFound();
   const orgId = user.organizationId;
 
-  const [packages, agents, recentJobs, appSettings] = await Promise.all([
+  const [packages, agents, groups, recentJobs, appSettings] = await Promise.all([
     prisma.softwarePackage.findMany({
       where: { organizationId: orgId, NOT: { type: "agent_update" } },
       include: { _count: { select: { jobs: true } } },
@@ -22,8 +22,17 @@ export default async function SoftwarePage() {
     }),
     prisma.softwareAgent.findMany({
       where: { organizationId: orgId },
-      include: { _count: { select: { jobs: true } } },
+      include: {
+        _count: { select: { jobs: true } },
+        asset: { select: { name: true } },
+        groups: { select: { groupId: true } },
+      },
       orderBy: { hostname: "asc" },
+    }),
+    prisma.agentGroup.findMany({
+      where: { organizationId: orgId },
+      include: { _count: { select: { members: true } } },
+      orderBy: { name: "asc" },
     }),
     prisma.softwareJob.findMany({
       where: { agent: { organizationId: orgId } },
@@ -44,6 +53,7 @@ export default async function SoftwarePage() {
     <SoftwareDashboard
       packages={packages}
       agents={agents}
+      groups={groups}
       recentJobs={recentJobs}
       isAdmin={user.isAdmin}
       enrollmentToken={appSettings?.enrollmentToken ?? null}
