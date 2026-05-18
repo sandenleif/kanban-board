@@ -36,6 +36,9 @@ export async function POST(req: NextRequest) {
     let filePath: string | null = null;
     let fileMime: string | null = null;
 
+    // Track the file write promise separately so finish doesn't race it
+    let fileWritePromise: Promise<void> | null = null;
+
     await new Promise<void>((resolve, reject) => {
       const bb = Busboy({
         headers: Object.fromEntries(req.headers.entries()),
@@ -44,13 +47,13 @@ export async function POST(req: NextRequest) {
 
       bb.on("field", (name, val) => { fields[name] = val; });
 
-      bb.on("file", async (fieldname, fileStream, info) => {
+      bb.on("file", (fieldname, fileStream, info) => {
         const { filename, mimeType } = info;
         const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, "_");
         const pkgId    = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
         const dir      = join(UPLOAD_DIR, pkgId);
 
-        try {
+        fileWritePromise = (async () => {
           await mkdir(dir, { recursive: true });
           const dest = join(dir, safeName);
           const ws   = createWriteStream(dest);
@@ -65,16 +68,24 @@ export async function POST(req: NextRequest) {
           fileName = safeName;
           filePath = `${pkgId}/${safeName}`;
           fileMime = mimeType;
+        })();
+
+        // Propagate file write errors to outer promise
+        fileWritePromise.catch(reject);
+      });
+
+      bb.on("finish", async () => {
+        try {
+          // Wait for file write to complete before resolving
+          if (fileWritePromise) await fileWritePromise;
+          resolve();
         } catch (err) {
-          fileStream.resume(); // drain
           reject(err);
         }
       });
 
-      bb.on("finish", resolve);
       bb.on("error", reject);
 
-      // Pipe the request body into busboy
       Readable.fromWeb(req.body as import("stream/web").ReadableStream)
         .pipe(bb);
     });
