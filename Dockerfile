@@ -50,6 +50,11 @@ COPY --from=builder --chown=nextjs:nodejs /app/node_modules/busboy   ./node_modu
 COPY --chown=nextjs:nodejs scripts/entrypoint.sh ./entrypoint.sh
 RUN chmod +x ./entrypoint.sh
 
+# Ensure upload directory exists with correct ownership before switching user.
+# Named volumes are initialised from the image on first creation, so this
+# guarantees nextjs can write even on a fresh deploy.
+RUN mkdir -p /app/uploads/packages && chown -R nextjs:nodejs /app/uploads
+
 USER nextjs
 
 EXPOSE 3000
