@@ -253,7 +253,7 @@ export function PackageDetail({ pkg, agents, groups, jobs, isAdmin }: {
                 <input type="checkbox" checked={copyOnly} onChange={(e) => setCopyOnly(e.target.checked)} className="rounded" />
                 <div>
                   <p className="text-sm font-medium text-foreground">Nur kopieren (nicht installieren)</p>
-                  <p className="text-xs text-muted-foreground">Datei wird nach C:\Temp\KanbanFlow\ übertragen, aber nicht ausgeführt</p>
+                  <p className="text-xs text-muted-foreground">Datei wird nach %TEMP%\KanbanFlow\ übertragen und dort gespeichert, aber nicht ausgeführt. Der Ordner wird automatisch erstellt.</p>
                 </div>
               </label>
             )}

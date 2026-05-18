@@ -30,7 +30,7 @@ param(
 # ============================================================
 
 # Agent-Version - bei jedem Update erhoehen
-$AgentVersion    = "1.2.0"
+$AgentVersion    = "1.2.1"
 
 # Freie PowerShell-Scripts vom Server: STANDARDMAESSIG DEAKTIVIERT
 # Sicherheitshinweis: Der Agent laeuft als SYSTEM. Beliebige Remote-Scripts
@@ -543,8 +543,10 @@ function Invoke-JobExecution {
                 if (-not $Job.fileUrl) { throw "Keine fileUrl angegeben" }
 
                 $fname = if ($Job.fileName) { $Job.fileName } else { "file.bin" }
-                if (-not (Test-Path $TempDir)) { New-Item -ItemType Directory -Path $TempDir -Force | Out-Null }
+                # Ordner immer anlegen, auch wenn er schon existiert (-Force)
+                New-Item -ItemType Directory -Path $TempDir -Force -ErrorAction Stop | Out-Null
                 $dest = "$TempDir\$fname"
+                $log.AppendLine("Zielordner: $TempDir") | Out-Null
 
                 $fullUrl = "$ServerUrl$($Job.fileUrl)"
                 $log.AppendLine("Lade herunter (nur kopieren): $fullUrl") | Out-Null
