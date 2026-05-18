@@ -30,7 +30,7 @@ param(
 # ============================================================
 
 # Agent-Version - bei jedem Update erhoehen
-$AgentVersion    = "1.2.1"
+$AgentVersion    = "1.2.2"
 
 # Freie PowerShell-Scripts vom Server: STANDARDMAESSIG DEAKTIVIERT
 # Sicherheitshinweis: Der Agent laeuft als SYSTEM. Beliebige Remote-Scripts
@@ -979,5 +979,18 @@ if ($Setup) {
         Write-Log "Keine Konfiguration gefunden. Setup ausfuehren: .\agent.ps1 -Setup" "ERROR"
         exit 1
     }
+
+    # Self-Healing: Scheduled Task neu anlegen falls er fehlt
+    $existingTask = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+    if (-not $existingTask) {
+        Write-Log "Scheduled Task '$TaskName' fehlt - wird neu angelegt." "WARN"
+        try {
+            Install-AgentTask -ScriptPath $InstallPath
+            Write-Log "Scheduled Task wiederhergestellt."
+        } catch {
+            Write-Log "Task-Wiederherstellung fehlgeschlagen: $_" "WARN"
+        }
+    }
+
     Start-AgentLoop -ServerUrl $cfg.ServerUrl -ApiKey $cfg.ApiKey
 }
