@@ -1,6 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { readFile } from "fs/promises";
+import { join } from "path";
+import { createHash } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
 import type { ActionResult } from "./auth";
@@ -124,6 +127,65 @@ export async function createJobAction(data: {
 
   revalidatePath("/software");
   return { success: true };
+}
+
+export async function pushAgentUpdateAction(agentIds: string[]): Promise<ActionResult & { jobCount?: number }> {
+  const { organizationId } = await requireAdmin();
+  if (!agentIds.length) return { error: "Keine PCs ausgewählt" };
+
+  // Read current agent.ps1 and compute version + SHA256
+  const scriptPath = join(process.cwd(), "scripts", "agent.ps1");
+  let script: Buffer;
+  try {
+    script = await readFile(scriptPath);
+  } catch {
+    return { error: "agent.ps1 nicht auf dem Server gefunden" };
+  }
+  const sha256   = createHash("sha256").update(script).digest("hex");
+  const content  = script.toString("utf8");
+  const verMatch = content.match(/\$AgentVersion\s*=\s*"([^"]+)"/);
+  const version  = verMatch?.[1] ?? "unknown";
+
+  // Find or create a hidden agent_update package for this org
+  let pkg = await prisma.softwarePackage.findFirst({
+    where: { organizationId, type: "agent_update" },
+  });
+
+  if (pkg) {
+    // Update sha256 + version so it always reflects the current script
+    pkg = await prisma.softwarePackage.update({
+      where: { id: pkg.id },
+      data:  { version, installParams: sha256 },
+    });
+  } else {
+    pkg = await prisma.softwarePackage.create({
+      data: {
+        organizationId,
+        name:          "KanbanFlow Agent",
+        type:          "agent_update",
+        version,
+        installParams: sha256,
+      },
+    });
+  }
+
+  // Verify all agents belong to this org
+  const validAgents = await prisma.softwareAgent.findMany({
+    where: { id: { in: agentIds }, organizationId },
+    select: { id: true },
+  });
+  if (!validAgents.length) return { error: "Keine gültigen PCs gefunden" };
+
+  await prisma.softwareJob.createMany({
+    data: validAgents.map((a) => ({
+      packageId: pkg!.id,
+      agentId:   a.id,
+      status:    "PENDING",
+    })),
+  });
+
+  revalidatePath("/software");
+  return { success: true, jobCount: validAgents.length };
 }
 
 export async function cancelJobAction(id: string): Promise<ActionResult> {

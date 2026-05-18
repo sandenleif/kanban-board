@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
     include: {
       package: {
         select: {
-          id: true, name: true, type: true,
+          id: true, name: true, type: true, version: true,
           wingetId: true, installParams: true,
           fileName: true, fileMimeType: true,
           // Don't send fileData here — agent fetches separately to avoid huge payloads
@@ -53,16 +53,23 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  return NextResponse.json(jobs.map((j) => ({
-    jobId:    j.id,
-    name:     j.package.name,
-    type:     j.package.type,
-    wingetId: j.package.wingetId,
-    params:   j.package.installParams,
-    fileName: j.package.fileName,
-    // File download URL if needed
-    fileUrl:  j.package.fileName ? `/api/agent/packages/${j.package.id}/download` : null,
-  })));
+  return NextResponse.json(jobs.map((j) => {
+    const isUpdate = j.package.type === "agent_update";
+    return {
+      jobId:    j.id,
+      name:     j.package.name,
+      type:     j.package.type,
+      wingetId: j.package.wingetId,
+      params:   isUpdate ? null : j.package.installParams,
+      fileName: j.package.fileName,
+      fileUrl:  isUpdate
+        ? "/api/agent/update/script"
+        : (j.package.fileName ? `/api/agent/packages/${j.package.id}/download` : null),
+      // agent_update extras
+      version: isUpdate ? j.package.version : undefined,
+      sha256:  isUpdate ? j.package.installParams : undefined,
+    };
+  }));
 }
 
 // POST — agent reports job result

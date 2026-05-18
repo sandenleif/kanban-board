@@ -16,7 +16,7 @@ export default async function SoftwarePage() {
 
   const [packages, agents, recentJobs, appSettings] = await Promise.all([
     prisma.softwarePackage.findMany({
-      where: { organizationId: orgId },
+      where: { organizationId: orgId, NOT: { type: "agent_update" } },
       include: { _count: { select: { jobs: true } } },
       orderBy: { createdAt: "desc" },
     }),

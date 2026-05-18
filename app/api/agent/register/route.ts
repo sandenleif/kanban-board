@@ -7,18 +7,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 type HardwareInfo = {
-  hostname:     string;
-  ipAddress?:   string;
-  macAddress?:  string;
-  osVersion?:   string;
+  hostname:      string;
+  ipAddress?:    string;
+  macAddress?:   string;
+  osVersion?:    string;
   manufacturer?: string;
-  model?:       string;
+  model?:        string;
   serialNumber?: string;
-  cpuName?:     string;
-  cpuCores?:    number;
-  ramGb?:       number;
-  diskGb?:      number;
-  domain?:      string;
+  cpuName?:      string;
+  cpuCores?:     number;
+  ramGb?:        number;
+  diskGb?:       number;
+  domain?:       string;
+  agentVersion?: string;
 };
 
 export async function POST(req: NextRequest) {
@@ -62,17 +63,18 @@ export async function POST(req: NextRequest) {
 
   // Upsert agent — create or update hardware info
   const agentData = {
-    ipAddress:    hardware.ipAddress   ?? null,
-    macAddress:   hardware.macAddress  ?? null,
-    osVersion:    hardware.osVersion   ?? null,
+    ipAddress:    hardware.ipAddress    ?? null,
+    macAddress:   hardware.macAddress   ?? null,
+    osVersion:    hardware.osVersion    ?? null,
     manufacturer: hardware.manufacturer ?? null,
-    model:        hardware.model       ?? null,
+    model:        hardware.model        ?? null,
     serialNumber: hardware.serialNumber ?? null,
-    cpuName:      hardware.cpuName     ?? null,
-    cpuCores:     hardware.cpuCores    ?? null,
-    ramGb:        hardware.ramGb       ?? null,
-    diskGb:       hardware.diskGb      ?? null,
-    domain:       hardware.domain      ?? null,
+    cpuName:      hardware.cpuName      ?? null,
+    cpuCores:     hardware.cpuCores     ?? null,
+    ramGb:        hardware.ramGb        ?? null,
+    diskGb:       hardware.diskGb       ?? null,
+    domain:       hardware.domain       ?? null,
+    agentVersion: hardware.agentVersion ?? null,
     lastSeenAt:   new Date(),
   };
 

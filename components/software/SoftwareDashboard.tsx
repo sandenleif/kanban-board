@@ -3,15 +3,15 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Plus, MonitorSmartphone, Package, CheckCircle2, XCircle, Clock, Loader2, Trash2, Key, Wifi, WifiOff, RefreshCw, Copy, Terminal } from "lucide-react";
+import { Plus, MonitorSmartphone, Package, CheckCircle2, XCircle, Clock, Loader2, Trash2, Key, Wifi, WifiOff, RefreshCw, Copy, Terminal, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { deleteAgentAction } from "@/actions/software";
+import { deleteAgentAction, pushAgentUpdateAction } from "@/actions/software";
 import { regenerateEnrollmentTokenAction } from "@/actions/settings";
 import { toast } from "sonner";
 import type { JobStatus } from "@prisma/client";
 
 type Pkg   = { id: string; name: string; version: string | null; type: string; _count: { jobs: number } };
-type Agent = { id: string; hostname: string; ipAddress: string | null; lastSeenAt: Date | null; _count: { jobs: number } };
+type Agent = { id: string; hostname: string; ipAddress: string | null; lastSeenAt: Date | null; agentVersion: string | null; _count: { jobs: number } };
 type Job   = { id: string; status: JobStatus; createdAt: Date; package: { id: string; name: string }; agent: { id: string; hostname: string } };
 
 const JOB_COLOR: Record<JobStatus, string> = {
@@ -57,6 +57,24 @@ export function SoftwareDashboard({ packages, agents, recentJobs, isAdmin, enrol
     });
   };
 
+  const handleUpdateAgent = (id: string, hostname: string) => {
+    if (!confirm(`Agent auf "${hostname}" aktualisieren?`)) return;
+    startTransition(async () => {
+      const r = await pushAgentUpdateAction([id]);
+      if (r.error) toast.error(r.error);
+      else { toast.success("Update-Job erstellt — wird beim nächsten Tick ausgeführt"); router.refresh(); }
+    });
+  };
+
+  const handleUpdateAll = (agentList: Agent[]) => {
+    if (!confirm(`Agent auf allen ${agentList.length} PCs aktualisieren?`)) return;
+    startTransition(async () => {
+      const r = await pushAgentUpdateAction(agentList.map((a) => a.id));
+      if (r.error) toast.error(r.error);
+      else { toast.success(`${r.jobCount} Update-Jobs erstellt`); router.refresh(); }
+    });
+  };
+
   return (
     <div className="animate-in space-y-6">
       <div className="flex items-center justify-between">
@@ -94,9 +112,18 @@ export function SoftwareDashboard({ packages, agents, recentJobs, isAdmin, enrol
 
         {/* Agents */}
         <div className="lg:col-span-1 space-y-3">
-          <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
-            <MonitorSmartphone className="h-4 w-4 text-primary" /> PCs ({agents.length})
-          </h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <MonitorSmartphone className="h-4 w-4 text-primary" /> PCs ({agents.length})
+            </h2>
+            {isAdmin && agents.length > 0 && (
+              <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5"
+                onClick={() => handleUpdateAll(agents)} disabled={isPending}>
+                {isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
+                Alle aktualisieren
+              </Button>
+            )}
+          </div>
 
           {isAdmin && (
             <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-2.5">
@@ -137,17 +164,27 @@ export function SoftwareDashboard({ packages, agents, recentJobs, isAdmin, enrol
               const online = isOnline(a.lastSeenAt);
               return (
                 <div key={a.id} className="rounded-lg border border-border bg-card px-3 py-2.5 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    {online ? <Wifi className="h-3.5 w-3.5 text-green-400" /> : <WifiOff className="h-3.5 w-3.5 text-muted-foreground/40" />}
-                    <div>
-                      <p className="text-sm font-medium text-foreground">{a.hostname}</p>
-                      <p className="text-xs text-muted-foreground">{a.ipAddress ?? "—"} · {a._count.jobs} Jobs</p>
+                  <div className="flex items-center gap-2 min-w-0">
+                    {online ? <Wifi className="h-3.5 w-3.5 text-green-400 shrink-0" /> : <WifiOff className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" />}
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-foreground truncate">{a.hostname}</p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {a.ipAddress ?? "—"} · {a._count.jobs} Jobs
+                        {a.agentVersion && <span className="ml-1 text-muted-foreground/60">· v{a.agentVersion}</span>}
+                      </p>
                     </div>
                   </div>
                   {isAdmin && (
-                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleDeleteAgent(a.id, a.hostname)}>
-                      <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
-                    </Button>
+                    <div className="flex items-center gap-1 shrink-0 ml-2">
+                      <Button size="icon" variant="ghost" className="h-7 w-7" title="Agent aktualisieren"
+                        onClick={() => handleUpdateAgent(a.id, a.hostname)} disabled={isPending}>
+                        <Download className="h-3.5 w-3.5 text-muted-foreground" />
+                      </Button>
+                      <Button size="icon" variant="ghost" className="h-7 w-7" title="PC entfernen"
+                        onClick={() => handleDeleteAgent(a.id, a.hostname)} disabled={isPending}>
+                        <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                      </Button>
+                    </div>
                   )}
                 </div>
               );
