@@ -31,21 +31,33 @@ export async function POST(req: NextRequest) {
 
   const { enrollmentToken, hardware } = body;
 
-  if (!enrollmentToken || !hardware?.hostname) {
-    return NextResponse.json({ error: "enrollmentToken and hardware.hostname required" }, { status: 400 });
+  if (!hardware?.hostname) {
+    return NextResponse.json({ error: "hardware.hostname required" }, { status: 400 });
   }
 
-  // Find org with matching enrollment token
-  const settings = await prisma.appSettings.findFirst({
-    where: { enrollmentToken },
-    select: { organizationId: true },
-  });
+  // Heartbeat path: already-registered agent authenticates via Bearer token
+  const auth = req.headers.get("authorization") ?? "";
+  const bearerKey = auth.startsWith("Bearer ") ? auth.slice(7).trim() : null;
 
-  if (!settings) {
-    return NextResponse.json({ error: "Invalid enrollment token" }, { status: 401 });
+  let orgId: string;
+
+  if (bearerKey) {
+    // Registered agent updating its own hardware info
+    const existing = await prisma.softwareAgent.findUnique({ where: { apiKey: bearerKey } });
+    if (!existing) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    orgId = existing.organizationId;
+  } else {
+    // First-time registration: enrollment token required
+    if (!enrollmentToken) {
+      return NextResponse.json({ error: "enrollmentToken required for initial registration" }, { status: 400 });
+    }
+    const settings = await prisma.appSettings.findFirst({
+      where: { enrollmentToken },
+      select: { organizationId: true },
+    });
+    if (!settings) return NextResponse.json({ error: "Invalid enrollment token" }, { status: 401 });
+    orgId = settings.organizationId;
   }
-
-  const orgId = settings.organizationId;
   const hostname = hardware.hostname.trim().toLowerCase();
 
   // Upsert agent — create or update hardware info
