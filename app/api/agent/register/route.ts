@@ -87,18 +87,17 @@ export async function POST(req: NextRequest) {
   });
 
   // Auto-create or update the inventory asset for this PC
-  const assetName = hardware.manufacturer && hardware.model
-    ? `${hardware.manufacturer} ${hardware.model}`
-    : hostname;
+  // Name is always the hostname (uppercase) — never overwritten by heartbeats
+  // so admins can rename assets manually without losing their changes.
+  const hostnameDisplay = hostname.toUpperCase();
 
   let assetId = agent.assetId;
 
   if (assetId) {
-    // Update existing asset with fresh hardware data
+    // Update hardware fields only — never touch the name the admin may have set
     await prisma.asset.updateMany({
       where: { id: assetId, organizationId: orgId },
       data: {
-        name:         assetName,
         manufacturer: hardware.manufacturer ?? undefined,
         model:        hardware.model        ?? undefined,
         serialNumber: hardware.serialNumber ?? undefined,
@@ -116,10 +115,9 @@ export async function POST(req: NextRequest) {
       await prisma.asset.update({
         where: { id: assetId },
         data: {
-          name: assetName,
           manufacturer: hardware.manufacturer ?? undefined,
-          model: hardware.model ?? undefined,
-          notes: buildNotes(hardware),
+          model:        hardware.model        ?? undefined,
+          notes:        buildNotes(hardware),
         },
       });
     } else {
@@ -134,7 +132,7 @@ export async function POST(req: NextRequest) {
       const newAsset = await prisma.asset.create({
         data: {
           organizationId:  orgId,
-          name:            assetName,
+          name:            hostnameDisplay,
           inventoryNumber: hostname,
           serialNumber:    hardware.serialNumber ?? null,
           manufacturer:    hardware.manufacturer ?? null,

@@ -23,6 +23,7 @@ export default async function PackageDetailPage({ params }: { params: Promise<{ 
       where: { organizationId: orgId },
       include: { asset: { select: { name: true } } },
       orderBy: { hostname: "asc" },
+      take: 500,
     }),
     prisma.agentGroup.findMany({
       where: { organizationId: orgId },

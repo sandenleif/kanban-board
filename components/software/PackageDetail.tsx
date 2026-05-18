@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Play, Trash2, CheckCircle2, XCircle, Clock, Loader2, Package, X, Pencil, Folder, Monitor } from "lucide-react";
+import { ArrowLeft, Play, Trash2, CheckCircle2, XCircle, Clock, Loader2, Package, X, Pencil, Folder, Monitor, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -38,6 +38,7 @@ export function PackageDetail({ pkg, agents, groups, jobs, isAdmin }: {
   const [deployTab, setDeployTab] = useState<"pcs" | "group">("pcs");
   const [selectedAgents, setSelectedAgents] = useState<Set<string>>(new Set());
   const [selectedGroupId, setSelectedGroupId] = useState<string>("");
+  const [agentSearch, setAgentSearch] = useState("");
   const [copyOnly, setCopyOnly] = useState(false);
   const [expandedJob, setExpandedJob] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
@@ -214,20 +215,44 @@ export function PackageDetail({ pkg, agents, groups, jobs, isAdmin }: {
             </div>
 
             {deployTab === "pcs" && (
-              <div className="space-y-1.5 max-h-56 overflow-y-auto">
-                {agents.length === 0
-                  ? <p className="text-xs text-muted-foreground">Keine PCs registriert</p>
-                  : agents.map((a) => (
-                      <label key={a.id} className="flex items-center gap-2.5 rounded-md px-3 py-2 hover:bg-muted cursor-pointer text-sm">
-                        <input type="checkbox" checked={selectedAgents.has(a.id)} onChange={() => toggleAgent(a.id)} className="rounded" />
-                        <div className="min-w-0">
-                          <p className="font-medium text-foreground truncate">{displayName(a)}</p>
-                          {a.asset && <p className="text-xs text-muted-foreground truncate">{a.hostname}</p>}
-                        </div>
-                        <span className="text-muted-foreground text-xs ml-auto shrink-0">{a.ipAddress}</span>
-                      </label>
-                    ))
-                }
+              <div className="space-y-2">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                  <Input placeholder="PC suchen…" value={agentSearch}
+                    onChange={(e) => setAgentSearch(e.target.value)}
+                    className="h-8 pl-8 text-xs" autoFocus />
+                </div>
+                {selectedAgents.size > 0 && (
+                  <p className="text-xs text-primary font-medium">{selectedAgents.size} PC(s) ausgewählt
+                    <button className="ml-2 text-muted-foreground underline" onClick={() => setSelectedAgents(new Set())}>Auswahl aufheben</button>
+                  </p>
+                )}
+                <div className="space-y-1 max-h-56 overflow-y-auto">
+                  {(() => {
+                    const q = agentSearch.toLowerCase();
+                    const filtered = agents.filter((a) =>
+                      !q || displayName(a).toLowerCase().includes(q) ||
+                      a.hostname.toLowerCase().includes(q) ||
+                      (a.ipAddress ?? "").includes(q)
+                    );
+                    const shown = filtered.slice(0, 50);
+                    return <>
+                      {shown.length === 0 && <p className="text-xs text-muted-foreground px-3 py-2">Keine Treffer</p>}
+                      {shown.map((a) => (
+                        <label key={a.id} className="flex items-center gap-2.5 rounded-md px-3 py-2 hover:bg-muted cursor-pointer text-sm">
+                          <input type="checkbox" checked={selectedAgents.has(a.id)} onChange={() => toggleAgent(a.id)} className="rounded" />
+                          <div className="min-w-0 flex-1">
+                            <p className="font-medium text-foreground truncate">{displayName(a)}</p>
+                            {a.asset && <p className="text-xs text-muted-foreground truncate">{a.hostname} · {a.ipAddress}</p>}
+                          </div>
+                        </label>
+                      ))}
+                      {filtered.length > 50 && (
+                        <p className="text-xs text-muted-foreground px-3 py-1">{filtered.length - 50} weitere — Suche verfeinern</p>
+                      )}
+                    </>;
+                  })()}
+                </div>
               </div>
             )}
 
