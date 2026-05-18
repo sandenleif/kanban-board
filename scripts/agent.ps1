@@ -30,7 +30,7 @@ param(
 # ============================================================
 
 # Agent-Version - bei jedem Update erhoehen
-$AgentVersion    = "1.0.0"
+$AgentVersion    = "1.1.0"
 
 # Freie PowerShell-Scripts vom Server: STANDARDMAESSIG DEAKTIVIERT
 # Sicherheitshinweis: Der Agent laeuft als SYSTEM. Beliebige Remote-Scripts
@@ -71,11 +71,15 @@ $JobTimeouts = @{
 $MaxLogBytes = 32768
 
 # Registry-Pfad fuer Konfiguration
-$RegistryPath = "HKLM:\SOFTWARE\KanbanFlow\Agent"
-$TaskName     = "KanbanFlow-Agent"
-$LogFile      = "$env:ProgramData\KanbanFlow\agent.log"
-$InstallPath  = "$env:ProgramData\KanbanFlow\agent.ps1"
-$TempDir      = "$env:TEMP\KanbanFlow"
+$RegistryPath    = "HKLM:\SOFTWARE\KanbanFlow\Agent"
+$TaskName        = "KanbanFlow-Agent"
+$LogFile         = "$env:ProgramData\KanbanFlow\agent.log"
+$InstallPath     = "$env:ProgramData\KanbanFlow\agent.ps1"
+$TempDir         = "$env:TEMP\KanbanFlow"
+
+# Heartbeat (Hardware-Inventar) nur alle X Minuten senden.
+# Jobs werden bei JEDEM Tick (1 Min) abgerufen.
+$HeartbeatIntervalMinutes = 5
 
 $ErrorActionPreference = "Stop"
 
@@ -746,7 +750,7 @@ function Install-AgentTask {
         -Argument "-NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$ScriptPath`""
 
     $trigger = New-ScheduledTaskTrigger `
-        -RepetitionInterval (New-TimeSpan -Minutes 5) `
+        -RepetitionInterval (New-TimeSpan -Minutes 1) `
         -Once -At (Get-Date)
 
     $settings = New-ScheduledTaskSettingsSet `
@@ -814,14 +818,23 @@ function Start-AgentLoop {
 
     Write-Log "Agent gestartet. Host: $env:COMPUTERNAME | Version: $AgentVersion | Server: $ServerUrl"
 
-    # Heartbeat: Hardware-Inventar aktualisieren
-    try {
-        $hw   = Get-HardwareInfo
-        $body = @{ enrollmentToken = $null; hardware = $hw } | ConvertTo-Json -Depth 3
-        Invoke-AgentApi -ServerUrl $ServerUrl -ApiKey $ApiKey `
-            -Path "/api/agent/register" -Method "POST" -Body $body | Out-Null
-    } catch {
-        Write-Log "Heartbeat/Inventar fehlgeschlagen: $_" "WARN"
+    # Heartbeat (Hardware + Software-Inventar) nur alle $HeartbeatIntervalMinutes Minuten.
+    # Letzten Zeitstempel aus Registry lesen.
+    $lastHeartbeatStr = (Get-ItemProperty -Path $RegistryPath -Name "LastHeartbeat" -ErrorAction SilentlyContinue).LastHeartbeat
+    $lastHeartbeat    = if ($lastHeartbeatStr) { [datetime]$lastHeartbeatStr } else { [datetime]::MinValue }
+    $doHeartbeat      = ([datetime]::UtcNow - $lastHeartbeat).TotalMinutes -ge $HeartbeatIntervalMinutes
+
+    if ($doHeartbeat) {
+        try {
+            $hw   = Get-HardwareInfo
+            $body = @{ enrollmentToken = $null; hardware = $hw } | ConvertTo-Json -Depth 3
+            Invoke-AgentApi -ServerUrl $ServerUrl -ApiKey $ApiKey `
+                -Path "/api/agent/register" -Method "POST" -Body $body | Out-Null
+            Set-ItemProperty -Path $RegistryPath -Name "LastHeartbeat" -Value ([datetime]::UtcNow.ToString("o"))
+            Write-Log "Heartbeat/Inventar gesendet."
+        } catch {
+            Write-Log "Heartbeat/Inventar fehlgeschlagen: $_" "WARN"
+        }
     }
 
     # Jobs abrufen (Authorization-Header statt URL-Parameter)
@@ -918,7 +931,7 @@ if ($Setup) {
     Write-Host "[OK] Agent v$AgentVersion erfolgreich eingerichtet!" -ForegroundColor Green
     Write-Host "  Script:  $InstallPath"
     Write-Host "  Logs:    $LogFile"
-    Write-Host "  Task:    $TaskName (alle 5 Minuten als SYSTEM)"
+    Write-Host "  Task:    $TaskName (jede Minute als SYSTEM, Heartbeat alle $HeartbeatIntervalMinutes Min)"
     Write-Host "  HTTPS:   $(if ($ServerUrl -match '^https://') { 'JA' } else { 'NEIN (Testmodus)' })"
     Write-Host ""
 
