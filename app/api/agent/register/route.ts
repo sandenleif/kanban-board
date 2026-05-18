@@ -7,19 +7,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 type HardwareInfo = {
-  hostname:      string;
-  ipAddress?:    string;
-  macAddress?:   string;
-  osVersion?:    string;
-  manufacturer?: string;
-  model?:        string;
-  serialNumber?: string;
-  cpuName?:      string;
-  cpuCores?:     number;
-  ramGb?:        number;
-  diskGb?:       number;
-  domain?:       string;
-  agentVersion?: string;
+  hostname:          string;
+  ipAddress?:        string;
+  macAddress?:       string;
+  osVersion?:        string;
+  manufacturer?:     string;
+  model?:            string;
+  serialNumber?:     string;
+  cpuName?:          string;
+  cpuCores?:         number;
+  ramGb?:            number;
+  diskGb?:           number;
+  domain?:           string;
+  agentVersion?:     string;
+  installedSoftware?: Array<{ name: string; version?: string; publisher?: string }>;
 };
 
 export async function POST(req: NextRequest) {
@@ -74,8 +75,9 @@ export async function POST(req: NextRequest) {
     ramGb:        hardware.ramGb        ?? null,
     diskGb:       hardware.diskGb       ?? null,
     domain:       hardware.domain       ?? null,
-    agentVersion: hardware.agentVersion ?? null,
-    lastSeenAt:   new Date(),
+    agentVersion:      hardware.agentVersion     ?? null,
+    installedSoftware: hardware.installedSoftware ?? undefined,
+    lastSeenAt:        new Date(),
   };
 
   const agent = await prisma.softwareAgent.upsert({

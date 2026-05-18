@@ -32,7 +32,12 @@ export default async function AssetDetailPage({ params }: { params: Promise<{ as
       // Load linked agent hardware data
       const agent = await prisma.softwareAgent.findFirst({
         where: { assetId: a.id },
-        select: { cpuName: true, cpuCores: true, ramGb: true, diskGb: true, osVersion: true, ipAddress: true, macAddress: true, domain: true, lastSeenAt: true, hostname: true },
+        select: {
+          cpuName: true, cpuCores: true, ramGb: true, diskGb: true,
+          osVersion: true, ipAddress: true, macAddress: true, domain: true,
+          lastSeenAt: true, hostname: true, agentVersion: true,
+          installedSoftware: true,
+        },
       });
       return { ...a, agent: agent ?? null };
     }),

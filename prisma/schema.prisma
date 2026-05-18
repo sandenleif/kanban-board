@@ -702,9 +702,10 @@ model SoftwareAgent {
   ramGb          Int?
   diskGb         Int?
   domain         String?
-  assetId        String?   // linked inventory asset
-  agentVersion   String?
-  apiKey         String    @unique @default(cuid())
+  assetId           String?   // linked inventory asset
+  agentVersion      String?
+  installedSoftware Json?
+  apiKey            String    @unique @default(cuid())
   lastSeenAt     DateTime?
   createdAt      DateTime  @default(now())
 

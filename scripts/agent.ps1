@@ -270,7 +270,46 @@ function Get-HardwareInfo {
         }
     } catch {}
 
+    try {
+        $hw.installedSoftware = Get-InstalledSoftware
+    } catch {
+        Write-Log "Software-Inventar konnte nicht gelesen werden: $_" "WARN"
+    }
+
     return $hw
+}
+
+function Get-InstalledSoftware {
+    # Liest installierte Software aus der Windows-Registry.
+    # Beide Registrierungspfade (64-Bit und 32-Bit) werden durchsucht.
+    $paths = @(
+        "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
+        "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*"
+    )
+    $seen = @{}
+    $apps = [System.Collections.Generic.List[hashtable]]::new()
+
+    foreach ($path in $paths) {
+        $items = Get-ItemProperty -Path $path -ErrorAction SilentlyContinue
+        foreach ($item in $items) {
+            $name = $item.DisplayName
+            if (-not $name -or $name.Trim() -eq "") { continue }
+            $key = $name.ToLower().Trim()
+            if ($seen[$key]) { continue }
+            $seen[$key] = $true
+
+            $app = @{ name = $name.Trim() }
+            if ($item.DisplayVersion) { $app.version   = $item.DisplayVersion.Trim() }
+            if ($item.Publisher)      { $app.publisher = $item.Publisher.Trim() }
+            $apps.Add($app)
+
+            # Maximal 500 Eintraege um riesige Payloads zu vermeiden
+            if ($apps.Count -ge 500) { break }
+        }
+        if ($apps.Count -ge 500) { break }
+    }
+
+    return ($apps | Sort-Object { $_["name"] })
 }
 
 # ============================================================

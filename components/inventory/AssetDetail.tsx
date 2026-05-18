@@ -1,19 +1,22 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Pencil, Trash2, UserPlus, User, Clock, Package, Loader2, Cpu, HardDrive, MemoryStick, Monitor, Wifi } from "lucide-react";
+import { ArrowLeft, Pencil, Trash2, UserPlus, User, Clock, Package, Loader2, Cpu, HardDrive, MemoryStick, Monitor, Wifi, AppWindow, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { updateAssetAction, deleteAssetAction, assignAssetAction } from "@/actions/inventory";
 import { toast } from "sonner";
 import type { AssetStatus } from "@prisma/client";
 
 type Assignment = { id: string; assignedAt: Date; returnedAt: Date | null; user: { id: string; name: string } };
+type InstalledApp = { name: string; version?: string | null; publisher?: string | null };
 type AgentHardware = {
   cpuName: string | null; cpuCores: number | null; ramGb: number | null; diskGb: number | null;
   osVersion: string | null; ipAddress: string | null; macAddress: string | null;
-  domain: string | null; lastSeenAt: Date | null; hostname: string;
+  domain: string | null; lastSeenAt: Date | null; hostname: string; agentVersion: string | null;
+  installedSoftware: unknown;
 };
 type Asset = {
   id: string; name: string; inventoryNumber: string | null; serialNumber: string | null;
@@ -55,6 +58,19 @@ export function AssetDetail({ asset, categories, locations, orgUsers, isAdmin }:
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [assignId, setAssignId] = useState(asset.assignedTo?.id ?? "");
+  const [swSearch, setSwSearch] = useState("");
+
+  const installedApps = useMemo<InstalledApp[]>(() => {
+    const raw = asset.agent?.installedSoftware;
+    if (!Array.isArray(raw)) return [];
+    return raw as InstalledApp[];
+  }, [asset.agent?.installedSoftware]);
+
+  const filteredApps = useMemo(() => {
+    if (!swSearch.trim()) return installedApps;
+    const q = swSearch.toLowerCase();
+    return installedApps.filter((a) => a.name.toLowerCase().includes(q) || (a.publisher ?? "").toLowerCase().includes(q));
+  }, [installedApps, swSearch]);
 
   const update = (data: Parameters<typeof updateAssetAction>[1]) => {
     startTransition(async () => {
@@ -194,6 +210,50 @@ export function AssetDetail({ asset, categories, locations, orgUsers, isAdmin }:
                     <span className="text-foreground">{asset.agent.domain}</span>
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+
+          {installedApps.length > 0 && (
+            <div className="rounded-xl border border-border bg-card p-5 space-y-3">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <AppWindow className="h-4 w-4 text-primary" />
+                  Installierte Software
+                  <span className="text-xs font-normal text-muted-foreground">({installedApps.length})</span>
+                </h2>
+              </div>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                <Input
+                  placeholder="Suchen…"
+                  value={swSearch}
+                  onChange={(e) => setSwSearch(e.target.value)}
+                  className="h-8 pl-8 text-xs"
+                />
+              </div>
+              <div className="overflow-y-auto max-h-80 rounded-md border border-border">
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 bg-muted/80 backdrop-blur-sm">
+                    <tr>
+                      <th className="text-left px-3 py-2 font-medium text-muted-foreground">Name</th>
+                      <th className="text-left px-3 py-2 font-medium text-muted-foreground w-32">Version</th>
+                      <th className="text-left px-3 py-2 font-medium text-muted-foreground hidden sm:table-cell">Hersteller</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredApps.map((app, i) => (
+                      <tr key={i} className="border-t border-border hover:bg-muted/30 transition-colors">
+                        <td className="px-3 py-1.5 text-foreground">{app.name}</td>
+                        <td className="px-3 py-1.5 font-mono text-muted-foreground">{app.version ?? "—"}</td>
+                        <td className="px-3 py-1.5 text-muted-foreground hidden sm:table-cell">{app.publisher ?? "—"}</td>
+                      </tr>
+                    ))}
+                    {filteredApps.length === 0 && (
+                      <tr><td colSpan={3} className="px-3 py-4 text-center text-muted-foreground">Keine Treffer</td></tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}
