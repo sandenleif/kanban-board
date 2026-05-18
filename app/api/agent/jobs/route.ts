@@ -1,12 +1,14 @@
 // Agent polling endpoint — called by PowerShell agent on each PC
-// GET  /api/agent/jobs?apiKey=xxx          → pending jobs for this agent
-// POST /api/agent/jobs?apiKey=xxx          → report job result
+// GET  /api/agent/jobs   → pending jobs for this agent
+// POST /api/agent/jobs   → report job result
+// Auth: Authorization: Bearer <apiKey>
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 async function resolveAgent(req: NextRequest) {
-  const apiKey = req.nextUrl.searchParams.get("apiKey");
+  const auth = req.headers.get("authorization") ?? "";
+  const apiKey = auth.startsWith("Bearer ") ? auth.slice(7).trim() : null;
   if (!apiKey) return null;
   return prisma.softwareAgent.findUnique({ where: { apiKey } });
 }
@@ -59,7 +61,7 @@ export async function GET(req: NextRequest) {
     params:   j.package.installParams,
     fileName: j.package.fileName,
     // File download URL if needed
-    fileUrl:  j.package.fileName ? `/api/agent/packages/${j.package.id}/download?apiKey=${agent.apiKey}` : null,
+    fileUrl:  j.package.fileName ? `/api/agent/packages/${j.package.id}/download` : null,
   })));
 }
 

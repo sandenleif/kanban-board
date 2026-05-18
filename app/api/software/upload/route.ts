@@ -1,10 +1,11 @@
-// Streaming file upload for software packages — avoids Server Action memory limits
+// Streaming file upload — uses busboy to pipe directly to disk, no RAM buffering
 // POST /api/software/upload  (multipart/form-data)
-// Fields: name, version, description, installParams, uninstallParams, file
 
 import { NextRequest, NextResponse } from "next/server";
-import { writeFile, mkdir } from "fs/promises";
+import { createWriteStream } from "fs";
+import { mkdir } from "fs/promises";
 import { join } from "path";
+import { Readable } from "stream";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
@@ -22,58 +23,84 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Admin required" }, { status: 403 });
   }
 
-  let formData: FormData;
+  const contentType = req.headers.get("content-type") ?? "";
+  if (!contentType.includes("multipart/form-data")) {
+    return NextResponse.json({ error: "multipart/form-data required" }, { status: 400 });
+  }
+
   try {
-    formData = await req.formData();
-  } catch {
-    return NextResponse.json({ error: "Invalid form data" }, { status: 400 });
+    const Busboy = (await import("busboy")).default;
+
+    const fields: Record<string, string> = {};
+    let fileName: string | null = null;
+    let filePath: string | null = null;
+    let fileMime: string | null = null;
+
+    await new Promise<void>((resolve, reject) => {
+      const bb = Busboy({
+        headers: Object.fromEntries(req.headers.entries()),
+        limits: { fileSize: 512 * 1024 * 1024 }, // 512 MB
+      });
+
+      bb.on("field", (name, val) => { fields[name] = val; });
+
+      bb.on("file", async (fieldname, fileStream, info) => {
+        const { filename, mimeType } = info;
+        const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, "_");
+        const pkgId    = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        const dir      = join(UPLOAD_DIR, pkgId);
+
+        try {
+          await mkdir(dir, { recursive: true });
+          const dest = join(dir, safeName);
+          const ws   = createWriteStream(dest);
+
+          await new Promise<void>((res, rej) => {
+            fileStream.pipe(ws);
+            ws.on("finish", res);
+            ws.on("error", rej);
+            fileStream.on("error", rej);
+          });
+
+          fileName = safeName;
+          filePath = `${pkgId}/${safeName}`;
+          fileMime = mimeType;
+        } catch (err) {
+          fileStream.resume(); // drain
+          reject(err);
+        }
+      });
+
+      bb.on("finish", resolve);
+      bb.on("error", reject);
+
+      // Pipe the request body into busboy
+      Readable.fromWeb(req.body as import("stream/web").ReadableStream)
+        .pipe(bb);
+    });
+
+    const name = fields.name?.trim();
+    if (!name) return NextResponse.json({ error: "Name erforderlich" }, { status: 400 });
+
+    const pkg = await prisma.softwarePackage.create({
+      data: {
+        organizationId:  user.organizationId,
+        name,
+        version:         fields.version?.trim() || null,
+        description:     fields.description?.trim() || null,
+        installParams:   fields.installParams?.trim() || null,
+        uninstallParams: fields.uninstallParams?.trim() || null,
+        wingetId:        fields.wingetId?.trim() || null,
+        type:            filePath ? "file" : (fields.type ?? "winget"),
+        fileName,
+        fileData:        filePath ? `__path__${filePath}` : null,
+        fileMimeType:    fileMime,
+      },
+    });
+
+    return NextResponse.json({ ok: true, id: pkg.id });
+  } catch (err) {
+    console.error("Upload error:", err);
+    return NextResponse.json({ error: `Upload fehlgeschlagen: ${String(err)}` }, { status: 500 });
   }
-
-  const name        = (formData.get("name") as string)?.trim();
-  const version     = (formData.get("version") as string)?.trim() || null;
-  const description = (formData.get("description") as string)?.trim() || null;
-  const installParams   = (formData.get("installParams") as string)?.trim() || null;
-  const uninstallParams = (formData.get("uninstallParams") as string)?.trim() || null;
-  const file        = formData.get("file") as File | null;
-
-  if (!name) return NextResponse.json({ error: "Name erforderlich" }, { status: 400 });
-
-  let fileName: string | null = null;
-  let filePath: string | null = null;
-
-  if (file && file.size > 0) {
-    // Sanitize filename
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-    const pkgId    = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    const dir      = join(UPLOAD_DIR, pkgId);
-
-    await mkdir(dir, { recursive: true });
-    const dest = join(dir, safeName);
-
-    const buffer = Buffer.from(await file.arrayBuffer());
-    await writeFile(dest, buffer);
-
-    fileName = safeName;
-    filePath = `${pkgId}/${safeName}`;
-  }
-
-  const pkg = await prisma.softwarePackage.create({
-    data: {
-      organizationId: user.organizationId,
-      name,
-      version,
-      description,
-      installParams,
-      uninstallParams,
-      type:     filePath ? "file" : "winget",
-      fileName: fileName,
-      // Store file path in wingetId field temporarily, or add filePath field
-      // We use a dedicated filePath field — add it via a new column approach:
-      // For now store path in fileData as a path marker
-      fileData: filePath ? `__path__${filePath}` : null,
-      fileMimeType: file?.type || null,
-    },
-  });
-
-  return NextResponse.json({ ok: true, id: pkg.id });
 }

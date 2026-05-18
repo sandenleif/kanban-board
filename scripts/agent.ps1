@@ -1,40 +1,94 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    KanbanFlow Software-Agent fuer Windows
+    KanbanFlow Secure Agent v1.0.0
 .DESCRIPTION
-    Meldet sich automatisch beim KanbanFlow-Server an, inventarisiert die Hardware
-    und fuehrt Software-Jobs aus.
+    Sicherer, modularer Windows-Agent fuer die KanbanFlow-Softwareverteilung.
+    Laeuft als SYSTEM-Dienst via Scheduled Task.
 .PARAMETER Setup
-    Erstkonfiguration: Server-URL und Enrollment-Token eingeben, Scheduled Task anlegen.
+    Erstkonfiguration: Server-URL und Enrollment-Token, legt Scheduled Task an.
 .PARAMETER ServerUrl
-    URL des KanbanFlow-Servers (z.B. http://172.29.13.134:3000)
+    URL des KanbanFlow-Servers (https:// empfohlen)
 .PARAMETER EnrollmentToken
-    Enrollment-Token aus Admin -> Software (einmalig fuer alle PCs gleich)
+    Gemeinsames Registrierungsgeheimnis (aus Admin -> Software)
+.PARAMETER AllowInsecureHttp
+    Erlaubt HTTP statt HTTPS (nur fuer Tests - NIEMALS in Produktion)
 .EXAMPLE
-    # Erstkonfiguration (als Administrator ausfuehren):
-    .\agent.ps1 -Setup -ServerUrl "http://172.29.13.134:3000" -EnrollmentToken "abc123..."
-
-    # Manueller Test-Lauf:
-    .\agent.ps1
+    .\agent.ps1 -Setup -ServerUrl "https://kanban.intern.de" -EnrollmentToken "abc..."
+    .\agent.ps1 -Setup -ServerUrl "http://172.29.13.134:3000" -EnrollmentToken "abc..." -AllowInsecureHttp
 #>
 
 param(
     [switch]$Setup,
     [string]$ServerUrl,
-    [string]$EnrollmentToken
+    [string]$EnrollmentToken,
+    [switch]$AllowInsecureHttp
 )
 
-$ErrorActionPreference = "Stop"
+# ============================================================
+# ABSCHNITT 1: GLOBALE KONFIGURATION
+# ============================================================
+
+# Agent-Version - bei jedem Update erhoehen
+$AgentVersion    = "1.0.0"
+
+# Freie PowerShell-Scripts vom Server: STANDARDMAESSIG DEAKTIVIERT
+# Sicherheitshinweis: Der Agent laeuft als SYSTEM. Beliebige Remote-Scripts
+# stellen ein erhebliches Sicherheitsrisiko dar. Nur aktivieren wenn noetig.
+$AllowRemoteScripts = $false
+
+# Erlaubte Job-Typen (Whitelist)
+$AllowedJobTypes = @(
+    "winget_install",
+    "file_install",
+    "restart_service",
+    "collect_inventory",
+    "agent_update",
+    "reboot_pending_check",
+    "get_disk_status",
+    "run_diagnostic",
+    # Rueckwaertskompatibilitaet mit alten Server-Versionen
+    "winget",
+    "file"
+)
+
+# Timeouts pro Job-Typ in Sekunden
+$JobTimeouts = @{
+    "winget_install"      = 1200  # 20 Minuten
+    "winget"              = 1200
+    "file_install"        = 1200
+    "file"                = 1200
+    "restart_service"     = 120   # 2 Minuten
+    "collect_inventory"   = 120
+    "agent_update"        = 300   # 5 Minuten
+    "reboot_pending_check"= 60
+    "get_disk_status"     = 60
+    "run_diagnostic"      = 300
+    "script"              = 300
+}
+
+# Maximale Log-Groesse pro Job (32 KB)
+$MaxLogBytes = 32768
+
+# Registry-Pfad fuer Konfiguration
 $RegistryPath = "HKLM:\SOFTWARE\KanbanFlow\Agent"
 $TaskName     = "KanbanFlow-Agent"
 $LogFile      = "$env:ProgramData\KanbanFlow\agent.log"
+$InstallPath  = "$env:ProgramData\KanbanFlow\agent.ps1"
 $TempDir      = "$env:TEMP\KanbanFlow"
 
-# -- Logging -------------------------------------------------------------------
+$ErrorActionPreference = "Stop"
+
+# ============================================================
+# ABSCHNITT 2: LOGGING
+# ============================================================
 
 function Write-Log {
-    param([string]$Message, [string]$Level = "INFO")
+    param(
+        [string]$Message,
+        [ValidateSet("INFO","WARN","ERROR","SEC")]
+        [string]$Level = "INFO"
+    )
     $ts   = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     $line = "[$ts] [$Level] $Message"
     Write-Host $line
@@ -45,14 +99,30 @@ function Write-Log {
     } catch {}
 }
 
-# -- Registry helpers ----------------------------------------------------------
+function Limit-String {
+    # Begrenzt einen String auf MaxLogBytes. Verhindert riesige Job-Logs.
+    param([string]$Text, [int]$MaxBytes = $MaxLogBytes)
+    if ([System.Text.Encoding]::UTF8.GetByteCount($Text) -gt $MaxBytes) {
+        $cut = $Text.Substring(0, [Math]::Min($Text.Length, ($MaxBytes / 2)))
+        return "$cut`n... [Log gekuerzt - Original ueberschritt $MaxBytes Bytes]"
+    }
+    return $Text
+}
+
+# ============================================================
+# ABSCHNITT 3: REGISTRY / KONFIGURATION
+# ============================================================
 
 function Save-Config {
     param([string]$Url, [string]$Key)
     if (-not (Test-Path $RegistryPath)) { New-Item -Path $RegistryPath -Force | Out-Null }
     Set-ItemProperty -Path $RegistryPath -Name "ServerUrl" -Value $Url
+    # Sicherheitshinweis: ApiKey liegt im Klartext in HKLM.
+    # Zugriff ist auf Administratoren und SYSTEM beschraenkt.
+    # Fuer hoeheren Schutz koennte DPAPI (ConvertFrom-SecureString) verwendet werden.
     Set-ItemProperty -Path $RegistryPath -Name "ApiKey"    -Value $Key
-    Write-Log "Konfiguration in Registry gespeichert."
+    Set-ItemProperty -Path $RegistryPath -Name "Version"   -Value $AgentVersion
+    Write-Log "Konfiguration in Registry gespeichert (HKLM)."
 }
 
 function Load-Config {
@@ -60,16 +130,98 @@ function Load-Config {
     $url = (Get-ItemProperty -Path $RegistryPath -Name "ServerUrl" -ErrorAction SilentlyContinue).ServerUrl
     $key = (Get-ItemProperty -Path $RegistryPath -Name "ApiKey"    -ErrorAction SilentlyContinue).ApiKey
     if (-not $url -or -not $key) { return $null }
-    return @{ ServerUrl = $url; ApiKey = $key }
+    return @{ ServerUrl = $url.TrimEnd("/"); ApiKey = $key }
 }
 
-# -- Hardware-Inventar sammeln -------------------------------------------------
+# ============================================================
+# ABSCHNITT 4: API HELPERS
+# ============================================================
 
-function Get-HardwareInfo {
-    $hw = @{ hostname = $env:COMPUTERNAME.ToLower() }
+function New-AgentHeaders {
+    # Zentrale Header-Funktion. ApiKey wird NICHT mehr in der URL uebergeben.
+    # Sicherheitshinweis: Bearer-Token verhindert versehentliches Logging
+    # des ApiKeys in URL-Logs (Proxy, IIS, nginx etc.).
+    param([string]$ApiKey)
+    return @{
+        "Authorization" = "Bearer $ApiKey"
+        "X-Agent-Version" = $AgentVersion
+        "X-Agent-Host"  = $env:COMPUTERNAME
+        "Content-Type"  = "application/json"
+    }
+}
+
+function Invoke-AgentApi {
+    # Zentraler HTTP-Helper fuer alle API-Aufrufe.
+    param(
+        [string]$ServerUrl,
+        [string]$ApiKey,
+        [string]$Path,
+        [string]$Method = "GET",
+        [string]$Body   = $null
+    )
+    $headers = New-AgentHeaders -ApiKey $ApiKey
+    $uri     = "$ServerUrl$Path"
+    $params  = @{
+        Uri         = $uri
+        Method      = $Method
+        Headers     = $headers
+        UseBasicParsing = $true
+        TimeoutSec  = 30
+        ErrorAction = "Stop"
+    }
+    if ($Body) {
+        $params.Body        = $Body
+        $params.ContentType = "application/json"
+    }
+    return Invoke-RestMethod @params
+}
+
+function Send-JobResult {
+    # Meldet das Ergebnis eines Jobs an den Server.
+    param(
+        [string]$ServerUrl,
+        [string]$ApiKey,
+        [string]$JobId,
+        [int]$ExitCode,
+        [string]$Log,
+        [datetime]$StartedAt,
+        [datetime]$FinishedAt
+    )
+    $duration = [Math]::Round(($FinishedAt - $StartedAt).TotalSeconds, 1)
+    $payload  = @{
+        jobId           = $JobId
+        exitCode        = $ExitCode
+        log             = (Limit-String -Text $Log)
+        hostname        = $env:COMPUTERNAME.ToLower()
+        agentVersion    = $AgentVersion
+        startedAt       = $StartedAt.ToString("o")
+        finishedAt      = $FinishedAt.ToString("o")
+        durationSeconds = $duration
+    } | ConvertTo-Json -Compress
 
     try {
-        # IP & MAC
+        Invoke-AgentApi -ServerUrl $ServerUrl -ApiKey $ApiKey `
+            -Path "/api/agent/jobs" -Method "POST" -Body $payload | Out-Null
+    } catch {
+        Write-Log "Ergebnis-Meldung fuer Job $JobId fehlgeschlagen: $_" "WARN"
+    }
+}
+
+# ============================================================
+# ABSCHNITT 5: INVENTORY / HARDWARE
+# ============================================================
+
+function Get-HardwareInfo {
+    # Sammelt Hardware- und Systeminformationen.
+    # Sicherheitshinweis: Es werden KEINE Benutzerdaten, Dokumente,
+    # Browser-Daten oder Passwoerter ausgelesen.
+    $hw = @{ hostname = $env:COMPUTERNAME.ToLower(); agentVersion = $AgentVersion }
+
+    try {
+        $hw.powershellVersion = $PSVersionTable.PSVersion.ToString()
+    } catch {}
+
+    try {
         $nic = Get-NetAdapter | Where-Object { $_.Status -eq "Up" -and $_.HardwareInterface } | Select-Object -First 1
         if ($nic) {
             $hw.macAddress = $nic.MacAddress
@@ -79,42 +231,41 @@ function Get-HardwareInfo {
     } catch {}
 
     try {
-        # OS
         $os = Get-CimInstance Win32_OperatingSystem
-        $hw.osVersion = "$($os.Caption) Build $($os.BuildNumber)"
+        $hw.osVersion    = "$($os.Caption) Build $($os.BuildNumber)"
+        $hw.lastBootTime = $os.LastBootUpTime.ToString("o")
     } catch {}
 
     try {
-        # CPU
         $cpu = Get-CimInstance Win32_Processor | Select-Object -First 1
         $hw.cpuName  = $cpu.Name.Trim()
         $hw.cpuCores = [int]$cpu.NumberOfLogicalProcessors
     } catch {}
 
     try {
-        # RAM
         $ram = (Get-CimInstance Win32_PhysicalMemory | Measure-Object -Property Capacity -Sum).Sum
-        $hw.ramGb = [int][math]::Round($ram / 1GB)
+        $hw.ramGb = [int][Math]::Round($ram / 1GB)
     } catch {}
 
     try {
-        # Festplatte (C:)
         $disk = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'"
-        $hw.diskGb = [int][math]::Round($disk.Size / 1GB)
+        $hw.totalDiskGb = [int][Math]::Round($disk.Size / 1GB)
+        $hw.freeDiskGb  = [int][Math]::Round($disk.FreeSpace / 1GB)
+        $hw.diskGb      = $hw.totalDiskGb
     } catch {}
 
     try {
-        # Hersteller & Modell
         $cs = Get-CimInstance Win32_ComputerSystem
         $hw.manufacturer = $cs.Manufacturer.Trim()
         $hw.model        = $cs.Model.Trim()
         $hw.domain       = $cs.Domain
+        # Aktuell eingeloggter (interaktiver) Benutzer - nur Benutzername, kein Passwort
+        if ($cs.UserName) { $hw.loggedInUser = ($cs.UserName -split '\\')[-1] }
     } catch {}
 
     try {
-        # Seriennummer
         $bios = Get-CimInstance Win32_BIOS
-        if ($bios.SerialNumber -and $bios.SerialNumber -notmatch "^\s*$|To Be Filled|Default") {
+        if ($bios.SerialNumber -and $bios.SerialNumber -notmatch "^\s*$|To Be Filled|Default|None") {
             $hw.serialNumber = $bios.SerialNumber.Trim()
         }
     } catch {}
@@ -122,41 +273,436 @@ function Get-HardwareInfo {
     return $hw
 }
 
-# -- Selbst-Registrierung am Server -------------------------------------------
+# ============================================================
+# ABSCHNITT 6: SECURITY / VALIDIERUNG
+# ============================================================
 
-function Register-Agent {
-    param([string]$ServerUrl, [string]$Token)
+function Test-JobValid {
+    # Validiert einen Job-Datensatz vom Server, bevor er ausgefuehrt wird.
+    # Sicherheitshinweis: Verhindert Injection und unerwartete Eingaben.
+    param([hashtable]$Job, [string]$ServerUrl)
 
-    Write-Log "Sammle Hardware-Daten..."
-    $hw = Get-HardwareInfo
+    if (-not $Job.jobId) {
+        Write-Log "Job ohne jobId abgelehnt." "SEC"
+        return "Kein jobId vorhanden"
+    }
+    if (-not $Job.type) {
+        Write-Log "Job $($Job.jobId) ohne type abgelehnt." "SEC"
+        return "Kein type vorhanden"
+    }
 
-    Write-Log "Registriere '$($hw.hostname)' am Server..."
+    # Typ normalisieren (Rueckwaertskompatibilitaet)
+    $normalizedType = switch ($Job.type) {
+        "winget" { "winget_install" }
+        "file"   { "file_install" }
+        default  { $Job.type }
+    }
+    $Job.type = $normalizedType
 
-    $body = @{
-        enrollmentToken = $Token
-        hardware        = $hw
-    } | ConvertTo-Json -Depth 3
+    if ($AllowedJobTypes -notcontains $Job.type) {
+        Write-Log "Unbekannter Job-Typ '$($Job.type)' fuer Job $($Job.jobId) abgelehnt." "SEC"
+        return "Unbekannter Job-Typ: $($Job.type)"
+    }
 
-    $response = Invoke-RestMethod `
-        -Uri "$ServerUrl/api/agent/register" `
-        -Method POST `
-        -Body $body `
-        -ContentType "application/json" `
-        -UseBasicParsing `
-        -TimeoutSec 30
+    # Script-Jobs: nur wenn explizit erlaubt
+    if ($Job.type -eq "script" -and -not $AllowRemoteScripts) {
+        Write-Log "Script-Job $($Job.jobId) abgelehnt (AllowRemoteScripts = false)." "SEC"
+        return "Script-Jobs sind auf diesem Agent deaktiviert"
+    }
 
-    if (-not $response.apiKey) { throw "Keine API-Key-Antwort vom Server" }
+    # Params-Groesse begrenzen (max 64 KB)
+    if ($Job.params -and [System.Text.Encoding]::UTF8.GetByteCount($Job.params) -gt 65536) {
+        Write-Log "Job $($Job.jobId) params zu gross." "SEC"
+        return "params zu gross (max 64 KB)"
+    }
 
-    Write-Log "Registrierung erfolgreich. Asset-ID: $($response.assetId)"
-    return $response.apiKey
+    # fileUrl darf nur relative Pfade vom eigenen Server enthalten
+    if ($Job.fileUrl) {
+        if ($Job.fileUrl -match "^https?://") {
+            Write-Log "Externe fileUrl in Job $($Job.jobId) abgelehnt: $($Job.fileUrl)" "SEC"
+            return "Externe fileUrl nicht erlaubt"
+        }
+        if ($Job.fileUrl -match "\.\." -or $Job.fileUrl -match "[;&|`$]") {
+            Write-Log "Unsichere fileUrl in Job $($Job.jobId) abgelehnt." "SEC"
+            return "Unsichere Zeichen in fileUrl"
+        }
+    }
+
+    # wingetId: nur alphanumerisch, Punkte, Bindestriche
+    if ($Job.wingetId -and $Job.wingetId -notmatch "^[a-zA-Z0-9._-]+$") {
+        Write-Log "Ungueltige wingetId '$($Job.wingetId)' in Job $($Job.jobId)." "SEC"
+        return "Ungueltige wingetId (erlaubt: Buchstaben, Zahlen, . - _)"
+    }
+
+    # serviceName: nur Buchstaben, Zahlen, Bindestriche, Unterstriche
+    if ($Job.serviceName -and $Job.serviceName -notmatch "^[a-zA-Z0-9_-]+$") {
+        Write-Log "Ungueltige serviceName '$($Job.serviceName)' in Job $($Job.jobId)." "SEC"
+        return "Ungueltige serviceName"
+    }
+
+    return $null  # kein Fehler = Job ist valide
 }
 
-# -- Scheduled Task einrichten -------------------------------------------------
+function Test-AgentPackageTrust {
+    # Prueft die Integritaet eines heruntergeladenen Pakets.
+    # Sicherheitshinweis: Aktuell SHA256-Pruefung.
+    # TODO: Spaeterer Erweiterungspunkt fuer Authenticode-Signaturpruefung:
+    #   $sig = Get-AuthenticodeSignature -FilePath $FilePath
+    #   if ($sig.Status -ne 'Valid') { throw "Signatur ungueltig" }
+    #   if ($sig.SignerCertificate.Thumbprint -ne $ExpectedThumbprint) { throw "Falscher Aussteller" }
+    param(
+        [string]$FilePath,
+        [string]$ExpectedSha256
+    )
+    if (-not $ExpectedSha256) {
+        Write-Log "Keine SHA256-Pruefsumme angegeben - Integritaetspruefung uebersprungen." "WARN"
+        return $true
+    }
+    $actual = (Get-FileHash -Path $FilePath -Algorithm SHA256).Hash
+    if ($actual.ToUpper() -ne $ExpectedSha256.ToUpper()) {
+        Write-Log "SHA256-Pruefung fehlgeschlagen! Erwartet: $ExpectedSha256 | Erhalten: $actual" "SEC"
+        return $false
+    }
+    Write-Log "SHA256-Pruefung bestanden: $actual"
+    return $true
+}
 
-function Install-ScheduledTask {
+function Compare-SemanticVersion {
+    # Gibt -1 zurueck wenn v1 < v2, 0 wenn gleich, 1 wenn v1 > v2
+    param([string]$v1, [string]$v2)
+    $parts1 = $v1 -split '\.'
+    $parts2 = $v2 -split '\.'
+    $maxLen  = [Math]::Max($parts1.Length, $parts2.Length)
+    for ($i = 0; $i -lt $maxLen; $i++) {
+        $p1 = if ($i -lt $parts1.Length) { [int]($parts1[$i] -replace '[^0-9]','') } else { 0 }
+        $p2 = if ($i -lt $parts2.Length) { [int]($parts2[$i] -replace '[^0-9]','') } else { 0 }
+        if ($p1 -lt $p2) { return -1 }
+        if ($p1 -gt $p2) { return  1 }
+    }
+    return 0
+}
+
+# ============================================================
+# ABSCHNITT 7: JOB-AUSFUEHRUNG
+# ============================================================
+
+function Invoke-WithTimeout {
+    # Fuehrt einen Prozess mit Timeout aus. Gibt @{ExitCode; Output} zurueck.
+    # exitCode 124 = Timeout (analog zu Unix timeout-Befehl)
+    param(
+        [string]$FilePath,
+        [string[]]$Arguments,
+        [int]$TimeoutSeconds = 300
+    )
+    $stdoutFile = "$TempDir\stdout_$([System.IO.Path]::GetRandomFileName()).txt"
+    $stderrFile = "$TempDir\stderr_$([System.IO.Path]::GetRandomFileName()).txt"
+
+    if (-not (Test-Path $TempDir)) { New-Item -ItemType Directory -Path $TempDir -Force | Out-Null }
+
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName               = $FilePath
+    $psi.Arguments              = $Arguments -join " "
+    $psi.UseShellExecute        = $false
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError  = $true
+    $psi.CreateNoWindow         = $true
+
+    $proc = [System.Diagnostics.Process]::Start($psi)
+    $stdout = $proc.StandardOutput.ReadToEndAsync()
+    $stderr = $proc.StandardError.ReadToEndAsync()
+
+    $finished = $proc.WaitForExit($TimeoutSeconds * 1000)
+
+    $out = $stdout.Result + $stderr.Result
+
+    if (-not $finished) {
+        try { $proc.Kill() } catch {}
+        Remove-Item $stdoutFile, $stderrFile -Force -ErrorAction SilentlyContinue
+        return @{ ExitCode = 124; Output = "[TIMEOUT nach $TimeoutSeconds Sekunden]`n$out" }
+    }
+
+    Remove-Item $stdoutFile, $stderrFile -Force -ErrorAction SilentlyContinue
+    return @{ ExitCode = $proc.ExitCode; Output = $out }
+}
+
+function Invoke-JobExecution {
+    param([hashtable]$Job, [string]$ServerUrl, [string]$ApiKey)
+
+    $log      = [System.Text.StringBuilder]::new()
+    $exitCode = 0
+    $timeout  = if ($JobTimeouts.ContainsKey($Job.type)) { $JobTimeouts[$Job.type] } else { 300 }
+
+    try {
+        switch ($Job.type) {
+
+            # --------------------------------------------------
+            # winget-Installation
+            # --------------------------------------------------
+            { $_ -in "winget_install","winget" } {
+                if (-not $Job.wingetId) { throw "Keine wingetId angegeben" }
+
+                $wingetArgs = @("install", "--id", $Job.wingetId)
+                if ($Job.params) {
+                    $extra = $Job.params -split '\s+' | Where-Object { $_ -ne "" }
+                    $wingetArgs += $extra
+                } else {
+                    $wingetArgs += @("--silent","--accept-package-agreements","--accept-source-agreements")
+                }
+
+                $log.AppendLine("winget $($wingetArgs -join ' ')") | Out-Null
+                $result = Invoke-WithTimeout -FilePath "winget.exe" -Arguments $wingetArgs -TimeoutSeconds $timeout
+                $log.AppendLine($result.Output) | Out-Null
+                $exitCode = $result.ExitCode
+            }
+
+            # --------------------------------------------------
+            # Datei-Installation (vom Server herunterladen)
+            # --------------------------------------------------
+            { $_ -in "file_install","file" } {
+                if (-not $Job.fileUrl) { throw "Keine fileUrl angegeben" }
+
+                $fname = if ($Job.fileName) { $Job.fileName } else { "setup.exe" }
+                $dest  = "$TempDir\$($Job.jobId)_$fname"
+                if (-not (Test-Path $TempDir)) { New-Item -ItemType Directory -Path $TempDir -Force | Out-Null }
+
+                $fullUrl = "$ServerUrl$($Job.fileUrl)"
+                $log.AppendLine("Lade herunter: $fullUrl") | Out-Null
+
+                # Download mit Authorization-Header
+                $headers = New-AgentHeaders -ApiKey $ApiKey
+                Invoke-WebRequest -Uri $fullUrl -OutFile $dest -Headers $headers -UseBasicParsing -TimeoutSec 600
+                $log.AppendLine("Gespeichert: $dest") | Out-Null
+
+                # SHA256 pruefen falls vorhanden
+                if ($Job.sha256) {
+                    if (-not (Test-AgentPackageTrust -FilePath $dest -ExpectedSha256 $Job.sha256)) {
+                        Remove-Item $dest -Force -ErrorAction SilentlyContinue
+                        throw "SHA256-Pruefung fehlgeschlagen"
+                    }
+                }
+
+                $installArgs = if ($Job.params) { $Job.params -split '\s+' | Where-Object { $_ -ne "" } } else { @() }
+                $log.AppendLine("Starte: $dest $($installArgs -join ' ')") | Out-Null
+
+                $result = Invoke-WithTimeout -FilePath $dest -Arguments $installArgs -TimeoutSeconds $timeout
+                $log.AppendLine($result.Output) | Out-Null
+                $exitCode = $result.ExitCode
+
+                Remove-Item $dest -Force -ErrorAction SilentlyContinue
+            }
+
+            # --------------------------------------------------
+            # Windows-Dienst neu starten
+            # --------------------------------------------------
+            "restart_service" {
+                $svcName = if ($Job.serviceName) { $Job.serviceName } elseif ($Job.params) { $Job.params.Trim() } else { throw "Kein serviceName" }
+                $log.AppendLine("Starte Dienst neu: $svcName") | Out-Null
+
+                $svc = Get-Service -Name $svcName -ErrorAction Stop
+                $log.AppendLine("Aktueller Status: $($svc.Status)") | Out-Null
+
+                Restart-Service -Name $svcName -Force -ErrorAction Stop
+                Start-Sleep -Seconds 3
+                $svc.Refresh()
+                $log.AppendLine("Neuer Status: $($svc.Status)") | Out-Null
+
+                $exitCode = if ($svc.Status -eq "Running") { 0 } else { 1 }
+            }
+
+            # --------------------------------------------------
+            # Hardware-Inventar an Server melden
+            # --------------------------------------------------
+            "collect_inventory" {
+                $log.AppendLine("Sammle Hardware-Inventar...") | Out-Null
+                $hw   = Get-HardwareInfo
+                $body = @{ enrollmentToken = $null; hardware = $hw } | ConvertTo-Json -Depth 3
+                Invoke-AgentApi -ServerUrl $ServerUrl -ApiKey $ApiKey `
+                    -Path "/api/agent/register" -Method "POST" -Body $body | Out-Null
+                $log.AppendLine("Inventar erfolgreich uebermittelt.") | Out-Null
+                $exitCode = 0
+            }
+
+            # --------------------------------------------------
+            # Reboot-Pending pruefen
+            # --------------------------------------------------
+            "reboot_pending_check" {
+                $pending = $false
+                $reasons = @()
+
+                # Windows Update
+                $wu = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired"
+                if (Test-Path $wu) { $pending = $true; $reasons += "Windows Update" }
+
+                # Component Based Servicing
+                $cbs = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending"
+                if (Test-Path $cbs) { $pending = $true; $reasons += "CBS" }
+
+                # PendingFileRenameOperations
+                $pfro = (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager" -ErrorAction SilentlyContinue).PendingFileRenameOperations
+                if ($pfro) { $pending = $true; $reasons += "FileRename" }
+
+                $log.AppendLine("Neustart ausstehend: $pending") | Out-Null
+                if ($reasons.Count -gt 0) { $log.AppendLine("Gruende: $($reasons -join ', ')") | Out-Null }
+                $exitCode = if ($pending) { 1 } else { 0 }
+            }
+
+            # --------------------------------------------------
+            # Festplattenstatus
+            # --------------------------------------------------
+            "get_disk_status" {
+                $disks = Get-CimInstance Win32_LogicalDisk | Where-Object { $_.DriveType -eq 3 }
+                foreach ($d in $disks) {
+                    $freeGb  = [Math]::Round($d.FreeSpace / 1GB, 1)
+                    $totalGb = [Math]::Round($d.Size / 1GB, 1)
+                    $pct     = if ($d.Size -gt 0) { [Math]::Round(($d.FreeSpace / $d.Size) * 100, 1) } else { 0 }
+                    $log.AppendLine("$($d.DeviceID) $freeGb GB frei von $totalGb GB ($pct% frei)") | Out-Null
+                }
+                $exitCode = 0
+            }
+
+            # --------------------------------------------------
+            # Diagnose (systeminfo, services etc.)
+            # --------------------------------------------------
+            "run_diagnostic" {
+                $log.AppendLine("=== Systeminfo ===") | Out-Null
+                $result = Invoke-WithTimeout -FilePath "systeminfo.exe" -Arguments @() -TimeoutSeconds $timeout
+                $log.AppendLine($result.Output) | Out-Null
+                $exitCode = $result.ExitCode
+            }
+
+            # --------------------------------------------------
+            # Remote-Script (nur wenn $AllowRemoteScripts = $true)
+            # --------------------------------------------------
+            "script" {
+                # Sicherheitswarnung: dieser Zweig darf nur erreicht werden,
+                # wenn AllowRemoteScripts = $true gesetzt ist.
+                Write-Log "WARNUNG: Remote-Script wird ausgefuehrt (AllowRemoteScripts = true)." "WARN"
+
+                $scriptFile = "$TempDir\job_$($Job.jobId).ps1"
+                if (-not (Test-Path $TempDir)) { New-Item -ItemType Directory -Path $TempDir -Force | Out-Null }
+                Set-Content -Path $scriptFile -Value $Job.params -Encoding UTF8
+
+                $result = Invoke-WithTimeout `
+                    -FilePath "powershell.exe" `
+                    -Arguments @("-NonInteractive","-ExecutionPolicy","Bypass","-File","`"$scriptFile`"") `
+                    -TimeoutSeconds $timeout
+                $log.AppendLine($result.Output) | Out-Null
+                $exitCode = $result.ExitCode
+
+                Remove-Item $scriptFile -Force -ErrorAction SilentlyContinue
+            }
+
+            # --------------------------------------------------
+            # Agent-Update (eigener Abschnitt unten)
+            # --------------------------------------------------
+            "agent_update" {
+                $updateResult = Invoke-AgentUpdate -Job $Job -ServerUrl $ServerUrl -ApiKey $ApiKey
+                $log.AppendLine($updateResult.Log) | Out-Null
+                $exitCode = $updateResult.ExitCode
+            }
+
+            default {
+                throw "Unbekannter Job-Typ: $($Job.type)"
+            }
+        }
+    } catch {
+        $log.AppendLine("FEHLER bei Job-Ausfuehrung: $_") | Out-Null
+        $exitCode = 1
+    }
+
+    return @{ ExitCode = $exitCode; Log = $log.ToString() }
+}
+
+# ============================================================
+# ABSCHNITT 8: AGENT-UPDATE
+# ============================================================
+
+function Invoke-AgentUpdate {
+    param(
+        [hashtable]$Job,
+        [string]$ServerUrl,
+        [string]$ApiKey
+    )
+
+    $log = [System.Text.StringBuilder]::new()
+    $backupPath = "$env:ProgramData\KanbanFlow\agent.backup.ps1"
+
+    try {
+        $newVersion = $Job.version
+        if (-not $newVersion) { throw "Keine Zielversion angegeben" }
+
+        # Versionspruefung
+        $cmp = Compare-SemanticVersion -v1 $AgentVersion -v2 $newVersion
+        if ($cmp -ge 0) {
+            $log.AppendLine("Agent ist bereits auf Version $AgentVersion - kein Update noetig.") | Out-Null
+            return @{ ExitCode = 0; Log = $log.ToString() }
+        }
+
+        $log.AppendLine("Update von $AgentVersion auf $newVersion...") | Out-Null
+
+        # Datei nur vom eigenen Server laden
+        if (-not $Job.fileUrl) { throw "Keine fileUrl fuer Update angegeben" }
+
+        $tempNew = "$TempDir\agent_new_$newVersion.ps1"
+        if (-not (Test-Path $TempDir)) { New-Item -ItemType Directory -Path $TempDir -Force | Out-Null }
+
+        $fullUrl = "$ServerUrl$($Job.fileUrl)"
+        $log.AppendLine("Lade: $fullUrl") | Out-Null
+
+        $headers = New-AgentHeaders -ApiKey $ApiKey
+        Invoke-WebRequest -Uri $fullUrl -OutFile $tempNew -Headers $headers -UseBasicParsing -TimeoutSec 60
+
+        # Integritaetspruefung (SHA256)
+        if (-not (Test-AgentPackageTrust -FilePath $tempNew -ExpectedSha256 $Job.sha256)) {
+            Remove-Item $tempNew -Force -ErrorAction SilentlyContinue
+            throw "SHA256-Pruefung fehlgeschlagen - Update abgebrochen"
+        }
+
+        # Syntax grob pruefen
+        $errors = $null
+        [System.Management.Automation.Language.Parser]::ParseFile($tempNew, [ref]$null, [ref]$errors) | Out-Null
+        if ($errors.Count -gt 0) {
+            $errMsg = ($errors | ForEach-Object { $_.Message }) -join "; "
+            Remove-Item $tempNew -Force -ErrorAction SilentlyContinue
+            throw "Syntaxfehler in neuer agent.ps1: $errMsg"
+        }
+        $log.AppendLine("Syntax-Pruefung bestanden.") | Out-Null
+
+        # Backup des aktuellen Scripts
+        Copy-Item -Path $InstallPath -Destination $backupPath -Force -ErrorAction Stop
+        $log.AppendLine("Backup erstellt: $backupPath") | Out-Null
+
+        # Neue Version installieren
+        Copy-Item -Path $tempNew -Destination $InstallPath -Force -ErrorAction Stop
+        Remove-Item $tempNew -Force -ErrorAction SilentlyContinue
+        $log.AppendLine("Agent auf Version $newVersion aktualisiert.") | Out-Null
+
+        return @{ ExitCode = 0; Log = $log.ToString() }
+
+    } catch {
+        $log.AppendLine("UPDATE FEHLGESCHLAGEN: $_") | Out-Null
+
+        # Rollback
+        if (Test-Path $backupPath) {
+            try {
+                Copy-Item -Path $backupPath -Destination $InstallPath -Force
+                $log.AppendLine("Rollback auf Backup erfolgreich.") | Out-Null
+            } catch {
+                $log.AppendLine("Rollback fehlgeschlagen: $_") | Out-Null
+            }
+        }
+        return @{ ExitCode = 1; Log = $log.ToString() }
+    }
+}
+
+# ============================================================
+# ABSCHNITT 9: SCHEDULED TASK SETUP
+# ============================================================
+
+function Install-AgentTask {
     param([string]$ScriptPath)
 
-    $action  = New-ScheduledTaskAction `
+    $action = New-ScheduledTaskAction `
         -Execute "powershell.exe" `
         -Argument "-NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$ScriptPath`""
 
@@ -165,7 +711,7 @@ function Install-ScheduledTask {
         -Once -At (Get-Date)
 
     $settings = New-ScheduledTaskSettingsSet `
-        -ExecutionTimeLimit (New-TimeSpan -Minutes 4) `
+        -ExecutionTimeLimit (New-TimeSpan -Minutes 10) `
         -MultipleInstances IgnoreNew `
         -StartWhenAvailable
 
@@ -182,90 +728,69 @@ function Install-ScheduledTask {
         -Trigger     $trigger `
         -Settings    $settings `
         -Principal   $principal `
-        -Description "KanbanFlow Software-Verteilungs-Agent" | Out-Null
+        -Description "KanbanFlow Software-Agent v$AgentVersion" | Out-Null
 
-    Write-Log "Scheduled Task '$TaskName' eingerichtet (alle 5 Minuten als SYSTEM)."
+    Write-Log "Scheduled Task '$TaskName' eingerichtet (alle 5 Minuten, SYSTEM)."
 }
 
-# -- Job-Ausfuehrung -----------------------------------------------------------
+# ============================================================
+# ABSCHNITT 10: REGISTRIERUNG AM SERVER
+# ============================================================
 
-function Invoke-Job {
-    param([hashtable]$Job, [string]$ServerUrl, [string]$ApiKey)
+function Register-Agent {
+    param([string]$ServerUrl, [string]$Token)
 
-    $log      = [System.Text.StringBuilder]::new()
-    $exitCode = 0
+    Write-Log "Sammle Hardware-Daten..."
+    $hw = Get-HardwareInfo
 
-    try {
-        switch ($Job.type) {
-            "winget" {
-                if (-not $Job.wingetId) { throw "Keine winget-ID" }
-                # Use custom params if set, otherwise use sensible defaults
-                if ($Job.params) {
-                    $wingetArgs = ($Job.params -split '\s+' | Where-Object { $_ -ne "" })
-                    $log.AppendLine("winget install --id $($Job.wingetId) $($Job.params)") | Out-Null
-                    $out = & winget install --id $Job.wingetId @wingetArgs 2>&1
-                } else {
-                    $log.AppendLine("winget install --id $($Job.wingetId) --silent --accept-package-agreements --accept-source-agreements") | Out-Null
-                    $out = & winget install --id $Job.wingetId --silent --accept-package-agreements --accept-source-agreements 2>&1
-                }
-                $log.AppendLine(($out -join "`n")) | Out-Null
-                $exitCode = $LASTEXITCODE
-            }
-            "file" {
-                if (-not $Job.fileUrl) { throw "Keine Download-URL" }
-                $fname = if ($Job.fileName) { $Job.fileName } else { "setup.exe" }
-                $dest = "$TempDir\$($Job.jobId)_$fname"
-                if (-not (Test-Path $TempDir)) { New-Item -ItemType Directory -Path $TempDir -Force | Out-Null }
+    Write-Log "Registriere '$($hw.hostname)' am Server (v$AgentVersion)..."
 
-                $fullUrl = "$ServerUrl$($Job.fileUrl)"
-                $log.AppendLine("Download: $fullUrl") | Out-Null
-                Invoke-WebRequest -Uri $fullUrl -OutFile $dest -UseBasicParsing
-                $log.AppendLine("Datei: $dest") | Out-Null
+    $body = @{
+        enrollmentToken = $Token
+        hardware        = $hw
+    } | ConvertTo-Json -Depth 3
 
-                $params = if ($Job.params) { $Job.params -split '\s+' } else { @() }
-                $proc = Start-Process -FilePath $dest -ArgumentList $params -Wait -PassThru -NoNewWindow
-                $exitCode = $proc.ExitCode
-                $log.AppendLine("Exit-Code: $exitCode") | Out-Null
-                Remove-Item $dest -Force -ErrorAction SilentlyContinue
-            }
-            "script" {
-                $scriptFile = "$TempDir\$($Job.jobId).ps1"
-                if (-not (Test-Path $TempDir)) { New-Item -ItemType Directory -Path $TempDir -Force | Out-Null }
-                Set-Content -Path $scriptFile -Value $Job.params -Encoding UTF8
-                $out = & powershell.exe -NonInteractive -ExecutionPolicy Bypass -File $scriptFile 2>&1
-                $exitCode = $LASTEXITCODE
-                $log.AppendLine(($out -join "`n")) | Out-Null
-                Remove-Item $scriptFile -Force -ErrorAction SilentlyContinue
-            }
-            default { throw "Unbekannter Typ: $($Job.type)" }
-        }
-    } catch {
-        $log.AppendLine("FEHLER: $_") | Out-Null
-        $exitCode = 1
-    }
+    # Beim erstmaligen Register gibt es noch keinen ApiKey -
+    # Enrollment-Token reicht als Authentifizierung
+    $response = Invoke-RestMethod `
+        -Uri "$ServerUrl/api/agent/register" `
+        -Method POST `
+        -Body $body `
+        -ContentType "application/json" `
+        -UseBasicParsing `
+        -TimeoutSec 30
 
-    return @{ exitCode = $exitCode; log = $log.ToString() }
+    if (-not $response.apiKey) { throw "Kein ApiKey in Server-Antwort" }
+
+    Write-Log "Registrierung erfolgreich. Asset-ID: $($response.assetId)"
+    return $response.apiKey
 }
 
-# -- Haupt-Polling-Loop --------------------------------------------------------
+# ============================================================
+# ABSCHNITT 11: HAUPT-POLLING-SCHLEIFE
+# ============================================================
 
 function Start-AgentLoop {
     param([string]$ServerUrl, [string]$ApiKey)
 
-    $baseUrl = "$ServerUrl/api/agent/jobs?apiKey=$ApiKey"
-    Write-Log "Agent gestartet. Host: $env:COMPUTERNAME | Server: $ServerUrl"
+    Write-Log "Agent gestartet. Host: $env:COMPUTERNAME | Version: $AgentVersion | Server: $ServerUrl"
 
-    # Hardware erneut melden (aktualisiert Inventar bei jedem Lauf)
+    # Heartbeat: Hardware-Inventar aktualisieren
     try {
         $hw   = Get-HardwareInfo
-        $body = @{ enrollmentToken = $null; hardware = $hw; apiKey = $ApiKey } | ConvertTo-Json -Depth 3
-        # Heartbeat: update lastSeenAt + hardware via jobs poll (GET already does this)
-    } catch {}
-
-    try {
-        $jobs = Invoke-RestMethod -Uri $baseUrl -Method GET -UseBasicParsing -TimeoutSec 30
+        $body = @{ enrollmentToken = $null; hardware = $hw } | ConvertTo-Json -Depth 3
+        Invoke-AgentApi -ServerUrl $ServerUrl -ApiKey $ApiKey `
+            -Path "/api/agent/register" -Method "POST" -Body $body | Out-Null
     } catch {
-        Write-Log "Server nicht erreichbar: $_" "WARN"
+        Write-Log "Heartbeat/Inventar fehlgeschlagen: $_" "WARN"
+    }
+
+    # Jobs abrufen (Authorization-Header statt URL-Parameter)
+    $jobs = $null
+    try {
+        $jobs = Invoke-AgentApi -ServerUrl $ServerUrl -ApiKey $ApiKey -Path "/api/agent/jobs"
+    } catch {
+        Write-Log "Jobs konnten nicht abgerufen werden: $_" "WARN"
         return
     }
 
@@ -276,66 +801,97 @@ function Start-AgentLoop {
 
     Write-Log "$($jobs.Count) Job(s) erhalten."
 
-    foreach ($job in $jobs) {
-        Write-Log "Job $($job.jobId): [$($job.type)] $($job.name)"
-        $result = Invoke-Job -Job @{
-            jobId    = $job.jobId; type = $job.type
-            wingetId = $job.wingetId; params = $job.params
-            fileUrl  = $job.fileUrl;  fileName = $job.fileName
-        } -ServerUrl $ServerUrl -ApiKey $ApiKey
+    foreach ($jobRaw in $jobs) {
+        # PSObject in Hashtable umwandeln fuer einfacheren Zugriff
+        $job = @{}
+        $jobRaw.PSObject.Properties | ForEach-Object { $job[$_.Name] = $_.Value }
 
-        Write-Log "Job $($job.jobId) fertig. Exit: $($result.exitCode)"
+        $startedAt = Get-Date
+        Write-Log "Starte Job $($job.jobId): [$($job.type)] $($job.name)"
 
-        $body = @{ jobId = $job.jobId; exitCode = $result.exitCode; log = $result.log } | ConvertTo-Json
-        try {
-            Invoke-RestMethod -Uri $baseUrl -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 30 | Out-Null
-        } catch {
-            Write-Log "Ergebnis-Meldung fehlgeschlagen: $_" "WARN"
+        # Sicherheitsvalidierung vor Ausfuehrung
+        $validationError = Test-JobValid -Job $job -ServerUrl $ServerUrl
+        if ($validationError) {
+            Write-Log "Job $($job.jobId) abgelehnt: $validationError" "SEC"
+            Send-JobResult -ServerUrl $ServerUrl -ApiKey $ApiKey `
+                -JobId $job.jobId -ExitCode 1 `
+                -Log "Job abgelehnt: $validationError" `
+                -StartedAt $startedAt -FinishedAt (Get-Date)
+            continue
         }
+
+        # Job ausfuehren
+        $result    = Invoke-JobExecution -Job $job -ServerUrl $ServerUrl -ApiKey $ApiKey
+        $finishedAt = Get-Date
+
+        Write-Log "Job $($job.jobId) abgeschlossen. Exit: $($result.ExitCode)"
+
+        # Ergebnis melden
+        Send-JobResult -ServerUrl $ServerUrl -ApiKey $ApiKey `
+            -JobId     $job.jobId `
+            -ExitCode  $result.ExitCode `
+            -Log       $result.Log `
+            -StartedAt $startedAt `
+            -FinishedAt $finishedAt
     }
 }
 
-# -- Einstiegspunkt ------------------------------------------------------------
+# ============================================================
+# ABSCHNITT 12: EINSTIEGSPUNKT
+# ============================================================
 
 if ($Setup) {
+    # Adminrechte pruefen
     if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
         [Security.Principal.WindowsBuiltInRole]::Administrator)) {
         Write-Host "FEHLER: Setup muss als Administrator ausgefuehrt werden." -ForegroundColor Red
         exit 1
     }
 
-    if (-not $ServerUrl)       { $ServerUrl       = Read-Host "Server-URL (z.B. http://172.29.13.134:3000)" }
+    if (-not $ServerUrl)       { $ServerUrl       = Read-Host "Server-URL (https://...)" }
     if (-not $EnrollmentToken) { $EnrollmentToken = Read-Host "Enrollment-Token (aus Admin -> Software)" }
 
     $ServerUrl = $ServerUrl.TrimEnd("/")
 
-    # Registrieren und API-Key holen
+    # HTTPS erzwingen (Sicherheitspruefung)
+    if ($ServerUrl -notmatch "^https://") {
+        if ($AllowInsecureHttp) {
+            Write-Log "WARNUNG: HTTP-Verbindung erlaubt (AllowInsecureHttp). NICHT fuer Produktion!" "WARN"
+        } else {
+            Write-Host "FEHLER: Nur HTTPS erlaubt. Fuer Tests: -AllowInsecureHttp Parameter verwenden." -ForegroundColor Red
+            Write-Host "Beispiel: .\agent.ps1 -Setup -ServerUrl `"$ServerUrl`" -EnrollmentToken `"...`" -AllowInsecureHttp"
+            exit 1
+        }
+    }
+
+    # Registrieren und ApiKey holen
     $apiKey = Register-Agent -ServerUrl $ServerUrl -Token $EnrollmentToken
     Save-Config -Url $ServerUrl -Key $apiKey
 
-    # Script in permanenten Pfad kopieren
-    $installDir  = "$env:ProgramData\KanbanFlow"
-    $installPath = "$installDir\agent.ps1"
+    # Script in permanenten Pfad installieren
+    $installDir = Split-Path $InstallPath
     if (-not (Test-Path $installDir)) { New-Item -ItemType Directory -Path $installDir -Force | Out-Null }
-    Copy-Item -Path $PSCommandPath -Destination $installPath -Force
+    Copy-Item -Path $PSCommandPath -Destination $InstallPath -Force
 
-    Install-ScheduledTask -ScriptPath $installPath
+    Install-AgentTask -ScriptPath $InstallPath
 
     Write-Host ""
-    Write-Host "[OK] Agent erfolgreich eingerichtet!" -ForegroundColor Green
-    Write-Host "  Script:  $installPath"
+    Write-Host "[OK] Agent v$AgentVersion erfolgreich eingerichtet!" -ForegroundColor Green
+    Write-Host "  Script:  $InstallPath"
     Write-Host "  Logs:    $LogFile"
     Write-Host "  Task:    $TaskName (alle 5 Minuten als SYSTEM)"
+    Write-Host "  HTTPS:   $(if ($ServerUrl -match '^https://') { 'JA' } else { 'NEIN (Testmodus)' })"
     Write-Host ""
 
+    # Ersten Lauf sofort ausfuehren
     $cfg = Load-Config
     Start-AgentLoop -ServerUrl $cfg.ServerUrl -ApiKey $cfg.ApiKey
 
 } else {
-    # Normaler Polling-Lauf (Scheduled Task)
+    # Normaler Polling-Lauf (vom Scheduled Task)
     $cfg = Load-Config
     if (-not $cfg) {
-        Write-Log "Keine Konfiguration. Setup ausfuehren: .\agent.ps1 -Setup" "ERROR"
+        Write-Log "Keine Konfiguration gefunden. Setup ausfuehren: .\agent.ps1 -Setup" "ERROR"
         exit 1
     }
     Start-AgentLoop -ServerUrl $cfg.ServerUrl -ApiKey $cfg.ApiKey

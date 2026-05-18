@@ -1,5 +1,6 @@
 // File download endpoint for agents
-// GET /api/agent/packages/[packageId]/download?apiKey=xxx
+// GET /api/agent/packages/[packageId]/download
+// Auth: Authorization: Bearer <apiKey>
 
 import { NextRequest, NextResponse } from "next/server";
 import { readFile } from "fs/promises";
@@ -13,7 +14,8 @@ export async function GET(
   { params }: { params: Promise<{ packageId: string }> }
 ) {
   const { packageId } = await params;
-  const apiKey = req.nextUrl.searchParams.get("apiKey");
+  const auth = req.headers.get("authorization") ?? "";
+  const apiKey = auth.startsWith("Bearer ") ? auth.slice(7).trim() : null;
   if (!apiKey) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const agent = await prisma.softwareAgent.findUnique({ where: { apiKey } });
