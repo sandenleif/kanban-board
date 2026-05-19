@@ -123,7 +123,7 @@ export async function POST(req: NextRequest) {
               new Promise((res2) => {
                 client.search(searchBase, {
                   filter, scope: "sub",
-                  attributes: ["cn", "displayName", "mail", "sAMAccountName", "userPrincipalName", "userAccountControl"],
+                  attributes: ["cn", "displayName", "mail", "sAMAccountName", "userPrincipalName", "userAccountControl", "pwdLastSet", "lockoutTime"],
                   sizeLimit: 3,
                 }, (sErr: Error | null, sr2: any) => {
                   if (sErr) { res2({ count: 0, details: [], err: sErr.message }); return; }
@@ -134,12 +134,18 @@ export async function POST(req: NextRequest) {
                     count++;
                     const uac = parseInt(g(entry, "userAccountControl") || "0");
                     const disabled = (uac & 2) !== 0;
+                    const pwdLastSet = g(entry, "pwdLastSet");
+                    const mustChangePwd = pwdLastSet === "0";
+                    const lockoutTime = g(entry, "lockoutTime");
+                    const locked = lockoutTime && lockoutTime !== "0";
                     details.push(
                       `DN: ${entry.dn.toString()}` +
                       `\nUPN: ${g(entry, "userPrincipalName") || "(nicht gesetzt)"}` +
                       `\nMail: ${g(entry, "mail") || "(nicht gesetzt)"}` +
                       `\nsAMAccountName: ${g(entry, "sAMAccountName")}` +
-                      `\nKonto: ${disabled ? "DEAKTIVIERT ⚠️" : "aktiv"}`
+                      `\nKonto: ${disabled ? "DEAKTIVIERT ⚠️" : "aktiv"}` +
+                      `\nPasswort: ${mustChangePwd ? "MUSS GEÄNDERT WERDEN ⚠️" : "ok"}` +
+                      `\nGesperrt: ${locked ? "JA ⚠️" : "nein"}`
                     );
                   });
                   sr2.on("error", (e: Error) => res2({ count, details, err: e.message }));
