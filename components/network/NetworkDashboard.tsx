@@ -90,10 +90,17 @@ export function NetworkDashboard({ vlans: initial, agents }: { vlans: Vlan[]; ag
     setAdLoading(true);
     try {
       const res = await fetch("/api/admin/network/ad-scan");
-      if (!res.ok) { toast.error((await res.json()).error); return; }
-      setAdComputers(await res.json());
-      toast.success("AD-Scan abgeschlossen");
-    } catch { toast.error("AD-Scan fehlgeschlagen"); }
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error ?? "AD-Scan fehlgeschlagen");
+        if (data.hint) toast.info(data.hint);
+        return;
+      }
+      const list: AdComputer[] = data.computers ?? data;
+      setAdComputers(list);
+      if (data.warning) toast.warning(data.warning);
+      toast.success(`AD-Scan: ${list.length} Computer gefunden`);
+    } catch (e) { toast.error(`AD-Scan fehlgeschlagen: ${e}`); }
     finally { setAdLoading(false); }
   };
 
