@@ -22,16 +22,29 @@ function cidrValid(cidr: string) {
 }
 
 async function upsertVlans(orgId: string, vlans: { name: string; subnet: string; description?: string }[]) {
-  let created = 0; let skipped = 0;
+  let created = 0; let updated = 0;
+
+  // Deduplicate names: if same name appears multiple times, append subnet suffix
+  const nameCounts = new Map<string, number>();
+  vlans.forEach((v) => nameCounts.set(v.name, (nameCounts.get(v.name) ?? 0) + 1));
+
   for (const v of vlans) {
+    const baseName = v.name.trim() || v.subnet;
+    // Make name unique if duplicated: "Pforzheim" + " (172.29.21)"
+    const name = (nameCounts.get(v.name) ?? 0) > 1
+      ? `${baseName} (${v.subnet.split("/")[0].split(".").slice(0, 3).join(".")})`
+      : baseName;
+
     try {
-      await prisma.networkVlan.create({
-        data: { organizationId: orgId, name: v.name.trim(), subnet: v.subnet.trim(), description: v.description ?? null },
+      await prisma.networkVlan.upsert({
+        where:  { organizationId_subnet: { organizationId: orgId, subnet: v.subnet.trim() } },
+        create: { organizationId: orgId, name, subnet: v.subnet.trim(), description: v.description ?? null },
+        update: { name, description: v.description ?? null },
       });
       created++;
-    } catch { skipped++; }
+    } catch { updated++; }
   }
-  return { created, skipped };
+  return { created, skipped: 0, updated };
 }
 
 export async function POST(req: NextRequest) {
