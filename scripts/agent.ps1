@@ -30,7 +30,7 @@ param(
 # ============================================================
 
 # Agent-Version - bei jedem Update erhoehen
-$AgentVersion    = "1.2.2"
+$AgentVersion    = "1.2.3"
 
 # Freie PowerShell-Scripts vom Server: STANDARDMAESSIG DEAKTIVIERT
 # Sicherheitshinweis: Der Agent laeuft als SYSTEM. Beliebige Remote-Scripts
@@ -910,6 +910,21 @@ function Start-AgentLoop {
         $finishedAt = Get-Date
 
         Write-Log "Job $($job.jobId) abgeschlossen. Exit: $($result.ExitCode)"
+
+        # Nach erfolgreicher Installation sofort Inventar aktualisieren
+        if ($result.ExitCode -eq 0 -and $job.type -in @("winget_install","winget","file_install","file")) {
+            try {
+                Write-Log "Aktualisiere Software-Inventar nach Installation..."
+                $hw   = Get-HardwareInfo
+                $body = @{ enrollmentToken = $null; hardware = $hw } | ConvertTo-Json -Depth 3
+                Invoke-AgentApi -ServerUrl $ServerUrl -ApiKey $ApiKey `
+                    -Path "/api/agent/register" -Method "POST" -Body $body | Out-Null
+                Set-ItemProperty -Path $RegistryPath -Name "LastHeartbeat" -Value ([datetime]::UtcNow.ToString("o"))
+                Write-Log "Inventar nach Installation aktualisiert."
+            } catch {
+                Write-Log "Inventar-Update nach Installation fehlgeschlagen: $_" "WARN"
+            }
+        }
 
         # Ergebnis melden
         Send-JobResult -ServerUrl $ServerUrl -ApiKey $ApiKey `
