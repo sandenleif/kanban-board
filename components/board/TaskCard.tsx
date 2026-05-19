@@ -30,6 +30,7 @@ function TaskCardInner({ task, isDragging, canEdit, onTaskClick }: TaskCardProps
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isSortableDragging ? 0.4 : 1,
+    willChange: transform ? "transform" : undefined, // promote to GPU layer only during drag
   };
 
   const overdue = isOverdue(task.dueDate) && task.priority !== "LOW";

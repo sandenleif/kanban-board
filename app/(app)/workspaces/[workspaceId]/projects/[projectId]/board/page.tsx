@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireWorkspaceMember } from "@/lib/permissions";
 import { notFound } from "next/navigation";
 import { BoardView } from "@/components/board/BoardView";
+import { getCachedWorkspaceMembers } from "@/lib/cache";
 import { canEdit } from "@/lib/utils";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
@@ -50,10 +51,7 @@ export default async function BoardPage({
 
   if (!project) notFound();
 
-  const workspaceMembers = await prisma.workspaceMember.findMany({
-    where: { workspaceId },
-    include: { user: { select: { id: true, name: true, email: true, avatarUrl: true } } },
-  });
+  const workspaceMembers = await getCachedWorkspaceMembers(workspaceId);
 
   return (
     <div className="flex flex-col h-full -m-6">

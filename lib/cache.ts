@@ -35,6 +35,16 @@ export const getCachedOrgUsers = (organizationId: string) =>
     { revalidate: 300, tags: [`org-${organizationId}-users`] }
   )();
 
+export const getCachedWorkspaceMembers = (workspaceId: string) =>
+  unstable_cache(
+    () => prisma.workspaceMember.findMany({
+      where: { workspaceId },
+      include: { user: { select: { id: true, name: true, email: true, avatarUrl: true } } },
+    }),
+    [`workspace-members-${workspaceId}`],
+    { revalidate: 300, tags: [`workspace-${workspaceId}-members`] }
+  )();
+
 // Overview stats — cache 60 seconds (near real-time is fine for dashboards)
 export const getCachedTicketStats = (organizationId: string) =>
   unstable_cache(
