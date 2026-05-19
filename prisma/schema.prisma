@@ -109,8 +109,9 @@ model Organization {
 model AppSettings {
   id             String   @id @default(cuid())
   organizationId String   @unique
-  logoBase64     String?  @db.Text
+  logoBase64     String?  @db.Text  // legacy — kept for migration
   logoMimeType   String?
+  logoPath       String?            // filesystem path (preferred)
   locale         String   @default("en")
   siteTitle      String?
   smtpHost        String?
@@ -133,8 +134,9 @@ model User {
   name           String
   password       String?
   avatarUrl      String?
-  avatarBase64   String?    @db.Text
+  avatarBase64   String?    @db.Text  // legacy — kept for migration
   avatarMimeType String?
+  avatarPath     String?              // filesystem path (preferred)
   status         UserStatus @default(PENDING)
   isAdmin        Boolean    @default(false)
   isSuperAdmin   Boolean    @default(false)
@@ -196,6 +198,7 @@ model WorkspaceMember {
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, userId])
+  @@index([userId])
   @@map("workspace_members")
 }
 
@@ -281,6 +284,7 @@ model TaskAssignee {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([taskId, userId])
+  @@index([userId])
   @@map("task_assignees")
 }
 
@@ -318,6 +322,7 @@ model TaskComment {
   task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
   author User @relation(fields: [authorId], references: [id])
 
+  @@index([taskId])
   @@map("task_comments")
 }
 
@@ -346,6 +351,8 @@ model TaskActivity {
   task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
   user User @relation(fields: [userId], references: [id])
 
+  @@index([taskId])
+  @@index([userId])
   @@map("task_activities")
 }
 
@@ -466,6 +473,7 @@ model Ticket {
   comments     TicketComment[]
 
   @@index([organizationId, status])
+  @@index([organizationId, status, createdAt(sort: Desc)]) // compound for filtered list
   @@index([organizationId, topic])
   @@index([organizationId, inventoryNumber])
   @@index([organizationId, categoryId])
@@ -489,6 +497,7 @@ model TicketComment {
   ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
   author User   @relation(fields: [authorId], references: [id])
 
+  @@index([ticketId])
   @@map("ticket_comments")
 }
 
@@ -715,10 +724,11 @@ model SoftwareAgent {
   lastSeenAt     DateTime?
   createdAt      DateTime  @default(now())
 
-  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  asset        Asset?              @relation(fields: [assetId], references: [id], onDelete: SetNull)
-  jobs         SoftwareJob[]
-  groups       AgentGroupMember[]
+  organization  Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  asset         Asset?              @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  jobs          SoftwareJob[]
+  groups        AgentGroupMember[]
+  scanHistory   SoftwareScanHistory[]
 
   @@unique([organizationId, hostname])
   @@index([organizationId])
@@ -948,4 +958,18 @@ model NetworkVlan {
   @@unique([organizationId, name])
   @@index([organizationId])
   @@map("network_vlans")
+}
+
+// ── Software Scan History ───────────────────────────────────────────────────
+
+model SoftwareScanHistory {
+  id        String   @id @default(cuid())
+  agentId   String
+  snapshot  Json     // installed software array at this point in time
+  createdAt DateTime @default(now())
+
+  agent SoftwareAgent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([agentId, createdAt(sort: Desc)])
+  @@map("software_scan_history")
 }

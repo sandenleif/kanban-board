@@ -1,9 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { writeFile, mkdir, unlink } from "fs/promises";
+import { join } from "path";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
 import type { ActionResult } from "./auth";
+
+const UPLOAD_DIR = join(process.cwd(), "uploads");
 
 async function requireAdmin() {
   const session = await requireSession();
@@ -24,13 +28,15 @@ export async function uploadLogoAction(formData: FormData): Promise<ActionResult
   if (!file.type.startsWith("image/")) return { error: "File must be an image" };
   if (file.size > 2 * 1024 * 1024) return { error: "Max file size is 2 MB" };
 
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const base64 = buffer.toString("base64");
+  const ext  = file.type.split("/")[1]?.replace("jpeg", "jpg") ?? "png";
+  const path = `logos/${organizationId}.${ext}`;
+  await mkdir(join(UPLOAD_DIR, "logos"), { recursive: true });
+  await writeFile(join(UPLOAD_DIR, path), Buffer.from(await file.arrayBuffer()));
 
   await prisma.appSettings.upsert({
-    where: { organizationId },
-    create: { organizationId, logoBase64: base64, logoMimeType: file.type },
-    update: { logoBase64: base64, logoMimeType: file.type },
+    where:  { organizationId },
+    create: { organizationId, logoPath: path, logoMimeType: file.type, logoBase64: null },
+    update: { logoPath: path, logoMimeType: file.type, logoBase64: null },
   });
 
   revalidatePath("/", "layout");
@@ -40,10 +46,15 @@ export async function uploadLogoAction(formData: FormData): Promise<ActionResult
 export async function removeLogoAction(): Promise<ActionResult> {
   const { organizationId } = await requireAdmin();
 
+  const s = await prisma.appSettings.findUnique({ where: { organizationId }, select: { logoPath: true } });
+  if (s?.logoPath) {
+    await unlink(join(UPLOAD_DIR, s.logoPath)).catch(() => {});
+  }
+
   await prisma.appSettings.upsert({
-    where: { organizationId },
-    create: { organizationId, logoBase64: null, logoMimeType: null },
-    update: { logoBase64: null, logoMimeType: null },
+    where:  { organizationId },
+    create: { organizationId, logoPath: null, logoBase64: null, logoMimeType: null },
+    update: { logoPath: null, logoBase64: null, logoMimeType: null },
   });
 
   revalidatePath("/", "layout");

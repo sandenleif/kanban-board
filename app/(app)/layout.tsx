@@ -11,7 +11,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const user = await prisma.user.findUnique({
     where: { id: session.userId },
-    select: { status: true, isAdmin: true, avatarBase64: true, avatarMimeType: true },
+    select: { status: true, isAdmin: true, avatarPath: true, avatarBase64: true },
   });
 
   if (!user) redirect("/login");
@@ -39,10 +39,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         },
       },
       orderBy: { joinedAt: "asc" },
+      take: 50,
     }),
     prisma.appSettings.findUnique({
       where: { organizationId: session.organizationId! },
-      select: { logoBase64: true, logoMimeType: true, siteTitle: true },
+      select: { logoPath: true, logoBase64: true, siteTitle: true },
     }),
     prisma.notification.findMany({
       where: { userId: session.userId },
@@ -52,13 +53,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   ]);
 
   const logoSrc =
-    appSettings?.logoBase64 && appSettings?.logoMimeType
-      ? `data:${appSettings.logoMimeType};base64,${appSettings.logoBase64}`
+    (appSettings?.logoPath || appSettings?.logoBase64)
+      ? `/api/files/logo`
       : null;
 
   const avatarSrc =
-    user.avatarBase64 && user.avatarMimeType
-      ? `data:${user.avatarMimeType};base64,${user.avatarBase64}`
+    (user.avatarPath || user.avatarBase64)
+      ? `/api/files/avatar/${session.userId}`
       : null;
 
   return (

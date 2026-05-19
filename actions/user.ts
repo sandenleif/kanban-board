@@ -59,12 +59,17 @@ export async function uploadAvatarAction(formData: FormData): Promise<ActionResu
   if (!file.type.startsWith("image/")) return { error: "File must be an image" };
   if (file.size > 2 * 1024 * 1024) return { error: "Max file size is 2 MB" };
 
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const base64 = buffer.toString("base64");
+  const { writeFile: wf, mkdir: md } = await import("fs/promises");
+  const { join } = await import("path");
+  const UPLOAD_DIR = join(process.cwd(), "uploads");
+  const ext  = file.type.split("/")[1]?.replace("jpeg", "jpg") ?? "png";
+  const path = `avatars/${session.userId}.${ext}`;
+  await md(join(UPLOAD_DIR, "avatars"), { recursive: true });
+  await wf(join(UPLOAD_DIR, path), Buffer.from(await file.arrayBuffer()));
 
   await prisma.user.update({
     where: { id: session.userId },
-    data: { avatarBase64: base64, avatarMimeType: file.type },
+    data: { avatarPath: path, avatarMimeType: file.type, avatarBase64: null },
   });
 
   revalidatePath("/", "layout");
@@ -73,10 +78,16 @@ export async function uploadAvatarAction(formData: FormData): Promise<ActionResu
 
 export async function removeAvatarAction(): Promise<ActionResult> {
   const session = await requireSession();
+  const u = await prisma.user.findUnique({ where: { id: session.userId }, select: { avatarPath: true } });
+  if (u?.avatarPath) {
+    const { unlink } = await import("fs/promises");
+    const { join } = await import("path");
+    await unlink(join(process.cwd(), "uploads", u.avatarPath)).catch(() => {});
+  }
 
   await prisma.user.update({
     where: { id: session.userId },
-    data: { avatarBase64: null, avatarMimeType: null },
+    data: { avatarPath: null, avatarBase64: null, avatarMimeType: null },
   });
 
   revalidatePath("/", "layout");

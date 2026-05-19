@@ -105,6 +105,22 @@ export async function POST(req: NextRequest) {
     update: agentData,
   });
 
+  // Keep software scan history (last 10 snapshots per agent)
+  if (hardware.installedSoftware?.length) {
+    await prisma.softwareScanHistory.create({
+      data: { agentId: agent.id, snapshot: hardware.installedSoftware as object[] },
+    });
+    const old = await prisma.softwareScanHistory.findMany({
+      where: { agentId: agent.id },
+      orderBy: { createdAt: "desc" },
+      skip: 10,
+      select: { id: true },
+    });
+    if (old.length > 0) {
+      await prisma.softwareScanHistory.deleteMany({ where: { id: { in: old.map((o) => o.id) } } });
+    }
+  }
+
   // Auto-create or update the inventory asset for this PC
   // Name is always the hostname (uppercase) — never overwritten by heartbeats
   // so admins can rename assets manually without losing their changes.
