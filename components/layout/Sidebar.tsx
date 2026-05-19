@@ -19,6 +19,7 @@ import {
   Headphones,
   Package,
   MonitorSmartphone,
+  Network,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -133,6 +134,21 @@ export function Sidebar({ workspaces, session: _, isAdmin, logoSrc, isEnterprise
             >
               <Package className="h-4 w-4 shrink-0" />
               Inventar
+            </Link>
+          </div>
+
+          <div className="px-2 mb-1">
+            <Link
+              href="/network"
+              className={cn(
+                "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium transition-colors",
+                pathname.startsWith("/network")
+                  ? "bg-sidebar-accent text-foreground"
+                  : "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
+              )}
+            >
+              <Network className="h-4 w-4 shrink-0" />
+              Netzwerk
             </Link>
           </div>
 

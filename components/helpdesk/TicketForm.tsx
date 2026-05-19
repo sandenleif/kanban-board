@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { AlertCircle, Loader2, User, Mail, Phone, Building2, LayoutList, StickyNote } from "lucide-react";
+import { NetworkDiagPanel } from "@/components/network/NetworkDiagPanel";
 import { ContactSearch, type SelectedContactData } from "./ContactSearch";
 import { toast } from "sonner";
 
@@ -146,6 +147,8 @@ export function TicketForm({ queues, teams, categories, orgUsers, currentUserId,
             <Input id="inventoryNumber" name="inventoryNumber" placeholder="z.B. INV-2024-0042" />
           </div>
         </div>
+
+        <NetworkDiagPanel />
 
         <div className="flex gap-3 pt-2">
           <Button type="submit" disabled={isPending}>

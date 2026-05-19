@@ -101,6 +101,7 @@ model Organization {
   softwarePackages  SoftwarePackage[]
   softwareAgents    SoftwareAgent[]
   agentGroups       AgentGroup[]
+  networkVlans      NetworkVlan[]
 
   @@map("organizations")
 }
@@ -928,4 +929,22 @@ model AgentGroupMember {
 
   @@id([groupId, agentId])
   @@map("agent_group_members")
+}
+
+// ── Network VLANs ───────────────────────────────────────────────────────────
+
+model NetworkVlan {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  subnet         String   // CIDR notation e.g. "172.29.13.0/24"
+  gateway        String?
+  description    String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+  @@map("network_vlans")
 }
