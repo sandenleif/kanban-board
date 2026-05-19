@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Trash2, MoveRight, Loader2, Lock, LockOpen,
   MessageSquare, Folder, Clock, User, Tag, Inbox,
-  Phone, Mail, Building2, LayoutList, StickyNote,
+  Phone, Mail, Building2, LayoutList, StickyNote, Monitor,
 } from "lucide-react";
+import { AgentHardwareCard, type AgentInfo } from "./AgentSearch";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -49,9 +50,10 @@ type WorkspaceEntry = { id: string; name: string; projects: { id: string; name: 
 interface Props {
   ticket: Ticket; queues: Queue[]; teams: Team[]; orgUsers: OrgUser[];
   allWorkspaces: WorkspaceEntry[]; currentUserId: string; isAdmin: boolean;
+  agent?: AgentInfo | null;
 }
 
-export function TicketDetail({ ticket, queues, teams, orgUsers, allWorkspaces, currentUserId, isAdmin }: Props) {
+export function TicketDetail({ ticket, queues, teams, orgUsers, allWorkspaces, currentUserId, isAdmin, agent }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [showConvert, setShowConvert] = useState(false);
@@ -410,6 +412,19 @@ export function TicketDetail({ ticket, queues, teams, orgUsers, allWorkspaces, c
                 )}
               </div>
             </>
+          )}
+
+          {/* Agent hardware — shown when ticket has inventoryNumber */}
+          {agent && (
+            <div className="mt-4">
+              <AgentHardwareCard agent={agent} />
+            </div>
+          )}
+          {ticket.inventoryNumber && !agent && (
+            <div className="mt-4 rounded-lg border border-border bg-muted/20 px-3 py-2.5 text-xs text-muted-foreground flex items-center gap-2">
+              <Monitor className="h-3.5 w-3.5 shrink-0" />
+              PC: <span className="font-mono">{ticket.inventoryNumber}</span> (kein Agent registriert)
+            </div>
           )}
         </div>
       </div>

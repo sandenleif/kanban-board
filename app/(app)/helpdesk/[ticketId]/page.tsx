@@ -53,6 +53,19 @@ export default async function TicketDetailPage({
     projects: m.workspace.projects,
   }));
 
+  // Load agent hardware data if ticket has an inventoryNumber (PC hostname)
+  const agent = ticket.inventoryNumber
+    ? await prisma.softwareAgent.findFirst({
+        where: { organizationId: user.organizationId, hostname: { equals: ticket.inventoryNumber, mode: "insensitive" } },
+        select: {
+          id: true, hostname: true, ipAddress: true, osVersion: true,
+          cpuName: true, cpuCores: true, ramGb: true, diskGb: true,
+          manufacturer: true, model: true, agentVersion: true, lastSeenAt: true,
+          asset: { select: { name: true } },
+        },
+      })
+    : null;
+
   return (
     <TicketDetail
       ticket={ticket}
@@ -62,6 +75,7 @@ export default async function TicketDetailPage({
       allWorkspaces={allWorkspaces}
       currentUserId={session.userId}
       isAdmin={user.isAdmin}
+      agent={agent ?? null}
     />
   );
 }

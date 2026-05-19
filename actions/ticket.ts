@@ -150,11 +150,25 @@ export async function updateTicketAction(
 ): Promise<ActionResult> {
   const { organizationId } = await requireOrgMember();
 
+  // State machine: CLOSED is a final state — nothing can change on a closed ticket
+  if (data.status) {
+    const current = await prisma.ticket.findFirst({
+      where: { id: ticketId, organizationId },
+      select: { status: true },
+    });
+    if (current?.status === "CLOSED") {
+      return { error: "Geschlossene Tickets können nicht mehr geändert werden." };
+    }
+  }
+
   const closedAt = data.status === "CLOSED" || data.status === "RESOLVED" ? new Date() : undefined;
+  // Re-opening a resolved ticket clears closedAt
+  const closedAtClear = data.status === "OPEN" || data.status === "IN_PROGRESS" || data.status === "PENDING"
+    ? { closedAt: null } : {};
 
   await prisma.ticket.updateMany({
     where: { id: ticketId, organizationId },
-    data: { ...data, ...(closedAt ? { closedAt } : {}) },
+    data: { ...data, ...(closedAt ? { closedAt } : closedAtClear) },
   });
 
   revalidatePath("/helpdesk");

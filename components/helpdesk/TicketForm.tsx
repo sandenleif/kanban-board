@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { AlertCircle, Loader2, User, Mail, Phone, Building2, LayoutList, StickyNote } from "lucide-react";
 import { NetworkDiagPanel } from "@/components/network/NetworkDiagPanel";
+import { AgentSearch, AgentHardwareCard, type AgentInfo } from "@/components/helpdesk/AgentSearch";
 import { ContactSearch, type SelectedContactData } from "./ContactSearch";
 import { toast } from "sonner";
 
@@ -44,6 +45,7 @@ export function TicketForm({ queues, teams, categories, orgUsers, currentUserId,
   const [state, action, isPending] = useActionState(createTicketAction, {});
   const [contact, setContact] = useState<SelectedContactData | null>(null);
   const [contactPhone, setContactPhone] = useState("");
+  const [selectedAgent, setSelectedAgent] = useState<AgentInfo | null>(null);
   const [, startTransition] = useTransition();
 
   useEffect(() => {
@@ -142,9 +144,9 @@ export function TicketForm({ queues, teams, categories, orgUsers, currentUserId,
             </select>
           </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="inventoryNumber">Inventarnummer</Label>
-            <Input id="inventoryNumber" name="inventoryNumber" placeholder="z.B. INV-2024-0042" />
+          <div className="space-y-1.5 col-span-2">
+            <Label>PC / Gerät</Label>
+            <AgentSearch onAgentSelected={setSelectedAgent} />
           </div>
         </div>
 
@@ -234,6 +236,12 @@ export function TicketForm({ queues, teams, categories, orgUsers, currentUserId,
           <div className="rounded-xl border border-dashed border-border bg-muted/20 px-4 py-8 text-center">
             <User className="h-6 w-6 text-muted-foreground/40 mx-auto mb-2" />
             <p className="text-xs text-muted-foreground">Kontakt auswählen um Kundendaten anzuzeigen</p>
+          </div>
+        )}
+
+        {selectedAgent && (
+          <div className="mt-3">
+            <AgentHardwareCard agent={selectedAgent} />
           </div>
         )}
       </div>

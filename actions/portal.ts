@@ -119,6 +119,21 @@ export async function createPortalTicketAction(
     orderBy: { position: "asc" },
   });
 
+  // Find linked contact for this portal user (by portalUser.contactId or by email)
+  const [portalUser, adminUser] = await Promise.all([
+    prisma.portalUser.findUnique({ where: { id: session.portalUserId }, select: { contactId: true } }),
+    prisma.user.findFirst({ where: { organizationId: session.organizationId, isAdmin: true } }),
+  ]);
+
+  let contactId: string | null = portalUser?.contactId ?? null;
+  if (!contactId) {
+    const contact = await prisma.ticketContact.findFirst({
+      where: { organizationId: session.organizationId, email: session.email },
+      select: { id: true },
+    });
+    contactId = contact?.id ?? null;
+  }
+
   const ticket = await prisma.ticket.create({
     data: {
       title,
@@ -129,7 +144,8 @@ export async function createPortalTicketAction(
       fromEmail: session.email,
       requesterType: "customer",
       categoryId: categoryId || null,
-      createdById: (await prisma.user.findFirst({ where: { organizationId: session.organizationId, isAdmin: true } }))?.id ?? session.portalUserId,
+      contactId,
+      createdById: adminUser?.id ?? session.portalUserId,
     },
   });
 
