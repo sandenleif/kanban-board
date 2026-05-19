@@ -95,17 +95,57 @@ async function scanAllVlans() {
   if (vlans.length === 0) return;
 
   console.log(`[NetworkScanner] Starte automatischen Scan von ${vlans.length} VLANs…`);
-  for (const vlan of vlans) {
+
+  // Separate: local subnet (server can scan directly) vs remote (needs agent)
+  const serverIp = "172.29.13.";
+  const localVlans  = vlans.filter((v) => v.subnet.startsWith(serverIp.slice(0, serverIp.lastIndexOf("."))));
+  const remoteVlans = vlans.filter((v) => !v.subnet.startsWith(serverIp.slice(0, serverIp.lastIndexOf("."))));
+
+  // Scan local subnets directly
+  for (const vlan of localVlans) {
     try {
       const r = await scanVlan(vlan.id);
-      console.log(`[NetworkScanner] ${vlan.name} (${vlan.subnet}): ${r.activeCount}/${r.totalPinged} aktiv`);
+      console.log(`[NetworkScanner] ${vlan.name}: ${r.activeCount}/${r.totalPinged} aktiv (direkt)`);
     } catch (err) {
       console.error(`[NetworkScanner] Fehler bei ${vlan.name}: ${err}`);
     }
-    // Small delay between subnets to avoid network saturation
     await new Promise((r) => setTimeout(r, 2000));
   }
-  console.log(`[NetworkScanner] Scan abgeschlossen.`);
+
+  // For remote VLANs: dispatch scan_subnet job to one agent in that VLAN
+  for (const vlan of remoteVlans) {
+    try {
+      const agent = await prisma.softwareAgent.findFirst({
+        where: { vlanId: vlan.id },
+        select: { id: true },
+      });
+      if (!agent) { console.log(`[NetworkScanner] ${vlan.name}: kein Agent im VLAN`); continue; }
+
+      // Find a dummy package or create the job type directly
+      // We need a SoftwarePackage to create a job — use a special internal one
+      let pkg = await prisma.softwarePackage.findFirst({
+        where: { type: "scan_subnet" },
+      });
+      if (!pkg) {
+        const orgId = (await prisma.softwareAgent.findUnique({ where: { id: agent.id }, select: { organizationId: true } }))?.organizationId;
+        if (orgId) {
+          pkg = await prisma.softwarePackage.create({
+            data: { organizationId: orgId, name: "Netzwerk-Scan (intern)", type: "scan_subnet" },
+          });
+        }
+      }
+      if (pkg) {
+        await prisma.softwareJob.create({
+          data: { packageId: pkg.id, agentId: agent.id, status: "PENDING" },
+        });
+        console.log(`[NetworkScanner] ${vlan.name}: scan_subnet-Job an Agent ${agent.id} gesendet`);
+      }
+    } catch (err) {
+      console.error(`[NetworkScanner] Fehler bei ${vlan.name}: ${err}`);
+    }
+  }
+
+  console.log(`[NetworkScanner] Scan-Zyklus abgeschlossen.`);
 }
 
 const INTERVAL_MS = 30 * 60 * 1000; // 30 Minuten

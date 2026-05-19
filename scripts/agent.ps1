@@ -30,7 +30,7 @@ param(
 # ============================================================
 
 # Agent-Version - bei jedem Update erhoehen
-$AgentVersion    = "1.2.3"
+$AgentVersion    = "1.3.0"
 
 # Freie PowerShell-Scripts vom Server: STANDARDMAESSIG DEAKTIVIERT
 # Sicherheitshinweis: Der Agent laeuft als SYSTEM. Beliebige Remote-Scripts
@@ -42,6 +42,7 @@ $AllowedJobTypes = @(
     "winget_install",
     "file_install",
     "file_copy",
+    "scan_subnet",
     "restart_service",
     "collect_inventory",
     "agent_update",
@@ -60,6 +61,7 @@ $JobTimeouts = @{
     "file_install"        = 1200
     "file"                = 1200
     "file_copy"           = 600   # 10 Minuten (nur Download)
+    "scan_subnet"         = 300   # 5 Minuten
     "restart_service"     = 120   # 2 Minuten
     "collect_inventory"   = 120
     "agent_update"        = 300   # 5 Minuten
@@ -633,6 +635,63 @@ function Invoke-JobExecution {
                     $pct     = if ($d.Size -gt 0) { [Math]::Round(($d.FreeSpace / $d.Size) * 100, 1) } else { 0 }
                     $log.AppendLine("$($d.DeviceID) $freeGb GB frei von $totalGb GB ($pct% frei)") | Out-Null
                 }
+                $exitCode = 0
+            }
+
+            # --------------------------------------------------
+            # Subnetz-Scan: pingt alle IPs des eigenen Subnetzes
+            # und meldet Ergebnisse zurueck (laeuft im lokalen VLAN)
+            # --------------------------------------------------
+            "scan_subnet" {
+                # Eigenes Subnetz aus IP-Adresse ableiten (/24 angenommen)
+                $myIp = (Get-NetIPAddress -AddressFamily IPv4 -InterfaceIndex (
+                    (Get-NetAdapter | Where-Object { $_.Status -eq "Up" -and $_.HardwareInterface } | Select-Object -First 1).ifIndex
+                ) -ErrorAction SilentlyContinue | Select-Object -First 1).IPAddress
+
+                if (-not $myIp) { throw "Eigene IP konnte nicht ermittelt werden" }
+
+                $parts = $myIp -split '\.'
+                $baseIp = "$($parts[0]).$($parts[1]).$($parts[2])."
+                $log.AppendLine("Scanne Subnetz: ${baseIp}0/24 von $myIp aus...") | Out-Null
+
+                $results = [System.Collections.Generic.List[hashtable]]::new()
+                $jobs2   = [System.Collections.Generic.List[object]]::new()
+
+                # Parallele Pings (max 50 gleichzeitig)
+                for ($i = 1; $i -le 254; $i++) {
+                    $ip = "$baseIp$i"
+                    $jobs2.Add([System.Net.NetworkInformation.Ping]::new().SendPingAsync($ip, 500))
+                }
+
+                for ($i = 0; $i -lt $jobs2.Count; $i++) {
+                    $ip = "$baseIp$($i + 1)"
+                    try {
+                        $reply = $jobs2[$i].GetAwaiter().GetResult()
+                        if ($reply.Status -eq "Success") {
+                            $latency = $reply.RoundtripTime
+                            # Reverse-DNS
+                            $hostname = $null
+                            try { $hostname = [System.Net.Dns]::GetHostEntry($ip).HostName } catch {}
+                            $results.Add(@{ ip = $ip; alive = $true; hostname = $hostname; latencyMs = $latency })
+                        }
+                    } catch {}
+                }
+
+                $activeCount = $results.Count
+                $log.AppendLine("$activeCount aktive IPs gefunden.") | Out-Null
+
+                # Ergebnis an Server melden
+                $payload = @{
+                    subnet      = "${baseIp}0/24"
+                    activeCount = $activeCount
+                    totalPinged = 254
+                    results     = $results.ToArray()
+                    scannedBy   = $env:COMPUTERNAME.ToLower()
+                } | ConvertTo-Json -Depth 3 -Compress
+
+                Invoke-AgentApi -ServerUrl $ServerUrl -ApiKey $ApiKey `
+                    -Path "/api/agent/scan-result" -Method "POST" -Body $payload | Out-Null
+
                 $exitCode = 0
             }
 
