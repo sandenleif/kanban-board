@@ -197,7 +197,7 @@ export function DbUpdatePanel() {
       {showLogs && logs.length > 0 && (
         <div className="border-t border-border bg-black/60 max-h-48 overflow-y-auto px-4 py-2">
           {logs.map((line, i) => (
-            <p key={i} className={cn(
+            <p key={`log-${i}-${line.slice(0, 20)}`} className={cn(
               "text-xs font-mono leading-5 whitespace-pre-wrap break-all",
               /error|fail/i.test(line) ? "text-red-400"
                 : /warn/i.test(line) ? "text-yellow-400"
