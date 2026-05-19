@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, useTransition, useMemo } from "react";
-import { Network, Plus, Trash2, Loader2, AlertTriangle, Wifi, WifiOff, RefreshCw, ChevronDown, ChevronUp, Server } from "lucide-react";
+import { Network, Plus, Trash2, Loader2, AlertTriangle, Wifi, WifiOff, RefreshCw, ChevronDown, ChevronUp, Server, ScanLine, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 
-type Vlan = { id: string; name: string; subnet: string; gateway: string | null; description: string | null };
+type ScanEntry = { ip: string; alive: boolean; hostname: string | null; latencyMs: number | null };
+type LastScan = { id: string; scannedAt: Date; activeCount: number; totalPinged: number; results: unknown };
+type Vlan = { id: string; name: string; subnet: string; gateway: string | null; description: string | null; scans: LastScan[] };
 type Agent = { hostname: string; ipAddress: string | null; osVersion: string | null; lastSeenAt: Date | null; manufacturer: string | null; model: string | null };
 type AdComputer = { hostname: string; os: string; lastLogon: string; ipAddress?: string };
 
@@ -41,6 +43,10 @@ export function NetworkDashboard({ vlans: initial, agents }: { vlans: Vlan[]; ag
   const [dhcpLoading, setDhcpLoading] = useState(false);
   const [showTextImport, setShowTextImport] = useState(false);
   const [textSubnets, setTextSubnets] = useState("");
+  const [scanning, setScanning] = useState<string | null>(null); // vlanId currently scanning
+  const [scanResults, setScanResults] = useState<Record<string, LastScan>>(
+    Object.fromEntries(vlans.filter((v) => v.scans[0]).map((v) => [v.id, v.scans[0]]))
+  );
   const [isPending, startTransition] = useTransition();
   const [newVlan, setNewVlan] = useState({ name: "", subnet: "", gateway: "", description: "" });
   const [showAddVlan, setShowAddVlan] = useState(false);
@@ -104,6 +110,32 @@ export function NetworkDashboard({ vlans: initial, agents }: { vlans: Vlan[]; ag
       window.location.reload();
     } catch { toast.error("Import fehlgeschlagen"); }
     finally { setDhcpLoading(false); }
+  };
+
+  const startScan = async (vlanId: string, vlanName: string) => {
+    setScanning(vlanId);
+    try {
+      const res = await fetch("/api/admin/network/scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ vlanId }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.error ?? "Scan fehlgeschlagen"); return; }
+      toast.success(`${vlanName}: ${data.activeCount} von ${data.totalPinged} IPs aktiv`);
+      // Update local scan result
+      setScanResults((prev) => ({
+        ...prev,
+        [vlanId]: {
+          id: data.scanId,
+          scannedAt: new Date(),
+          activeCount: data.activeCount,
+          totalPinged: data.totalPinged,
+          results: [], // full results loaded on expand
+        },
+      }));
+    } catch (e) { toast.error(`Scan fehlgeschlagen: ${e}`); }
+    finally { setScanning(null); }
   };
 
   const loadAdComputers = async () => {
@@ -299,33 +331,69 @@ export function NetworkDashboard({ vlans: initial, agents }: { vlans: Vlan[]; ag
                         <p><span className="text-foreground font-medium">{used}</span> / {usable} belegt</p>
                         <p className={isCritical ? "text-yellow-400" : ""}>{free} frei</p>
                       </div>
+                      <Button size="icon" variant="ghost" className="h-7 w-7" title="IP-Scan starten"
+                        onClick={() => startScan(vlan.id, vlan.name)} disabled={scanning === vlan.id}>
+                        {scanning === vlan.id
+                          ? <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                          : <ScanLine className="h-3.5 w-3.5 text-muted-foreground" />}
+                      </Button>
                       <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleDeleteVlan(vlan.id, vlan.name)}>
                         <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
                       </Button>
                     </div>
                   </div>
 
-                  {/* Progress bar */}
-                  <div className="mt-3">
-                    <div className="h-2 rounded-full bg-muted overflow-hidden">
-                      <div className={`h-full rounded-full transition-all ${pct >= 90 ? "bg-red-400" : pct >= 75 ? "bg-yellow-400" : "bg-primary"}`}
-                        style={{ width: `${Math.min(pct, 100)}%` }} />
+                  {/* Progress bar — known hosts */}
+                  <div className="mt-3 space-y-2">
+                    <div>
+                      <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+                        <span>Bekannte Hosts ({used}/{usable})</span>
+                        <span>{pct}%</span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                        <div className={`h-full rounded-full transition-all ${pct >= 90 ? "bg-red-400" : pct >= 75 ? "bg-yellow-400" : "bg-primary"}`}
+                          style={{ width: `${Math.min(pct, 100)}%` }} />
+                      </div>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-1">{pct}% belegt</p>
+
+                    {/* Scan results bar */}
+                    {(() => {
+                      const scan = scanResults[vlan.id];
+                      if (!scan) return null;
+                      const scanPct = scan.totalPinged > 0 ? Math.round((scan.activeCount / scan.totalPinged) * 100) : 0;
+                      const age = Math.round((Date.now() - new Date(scan.scannedAt).getTime()) / 60000);
+                      return (
+                        <div>
+                          <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+                            <span className="flex items-center gap-1">
+                              <Clock className="h-3 w-3" />
+                              Ping-Scan: {scan.activeCount} aktiv
+                            </span>
+                            <span className="text-muted-foreground/60">{age < 1 ? "gerade eben" : `vor ${age} Min`}</span>
+                          </div>
+                          <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                            <div className="h-full rounded-full bg-green-500/70 transition-all"
+                              style={{ width: `${Math.min(scanPct, 100)}%` }} />
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   {/* Toggle clients */}
-                  {hosts.length > 0 && (
+                  {(hosts.length > 0 || scanResults[vlan.id]) && (
                     <button onClick={() => setExpandedVlan(isExpanded ? null : vlan.id)}
                       className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
                       {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                      {hosts.length} Client{hosts.length !== 1 ? "s" : ""} {isExpanded ? "ausblenden" : "anzeigen"}
+                      {hosts.length} bekannte Client{hosts.length !== 1 ? "s" : ""}
+                      {scanResults[vlan.id] && ` · ${scanResults[vlan.id].activeCount} aktiv (Scan)`}
+                      {" "}{isExpanded ? "ausblenden" : "anzeigen"}
                     </button>
                   )}
                 </div>
 
                 {/* Client list */}
-                {isExpanded && hosts.length > 0 && (
+                {isExpanded && (hosts.length > 0 || scanResults[vlan.id]) && (
                   <div className="border-t border-border">
                     <table className="w-full text-xs">
                       <thead className="bg-muted/30">
@@ -375,6 +443,31 @@ export function NetworkDashboard({ vlans: initial, agents }: { vlans: Vlan[]; ag
                         </div>
                       </div>
                     )}
+
+                    {/* Unknown active IPs from scan (not in known hosts) */}
+                    {(() => {
+                      const scan = scanResults[vlan.id];
+                      if (!scan) return null;
+                      const knownIps = new Set(hosts.map((h) => h.ip));
+                      const unknownAlive = (scan.results as ScanEntry[])
+                        .filter((r) => r.alive && !knownIps.has(r.ip))
+                        .slice(0, 20);
+                      if (unknownAlive.length === 0) return null;
+                      return (
+                        <div className="border-t border-border bg-yellow-400/5">
+                          <p className="px-4 py-1.5 text-[10px] font-medium text-yellow-400 uppercase tracking-wide">
+                            Aktiv aber unbekannt ({unknownAlive.length})
+                          </p>
+                          {unknownAlive.map((r) => (
+                            <div key={r.ip} className="flex items-center gap-4 px-4 py-1.5 text-xs border-t border-border/50">
+                              <span className="font-mono text-foreground w-32">{r.ip}</span>
+                              <span className="text-muted-foreground flex-1">{r.hostname ?? "—"}</span>
+                              {r.latencyMs && <span className="text-green-400/70 shrink-0">{r.latencyMs.toFixed(1)} ms</span>}
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
               </div>

@@ -953,12 +953,27 @@ model NetworkVlan {
   description    String?
   createdAt      DateTime @default(now())
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  scans        NetworkScan[]
 
   @@unique([organizationId, subnet])
   @@unique([organizationId, name])
   @@index([organizationId])
   @@map("network_vlans")
+}
+
+model NetworkScan {
+  id          String   @id @default(cuid())
+  vlanId      String
+  scannedAt   DateTime @default(now())
+  activeCount Int      @default(0)
+  totalPinged Int      @default(0)
+  results     Json     // [{ip, alive, hostname, latencyMs}]
+
+  vlan NetworkVlan @relation(fields: [vlanId], references: [id], onDelete: Cascade)
+
+  @@index([vlanId, scannedAt(sort: Desc)])
+  @@map("network_scans")
 }
 
 // ── Software Scan History ───────────────────────────────────────────────────

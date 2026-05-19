@@ -17,6 +17,13 @@ export default async function NetworkPage() {
     prisma.networkVlan.findMany({
       where: { organizationId: user.organizationId },
       orderBy: { name: "asc" },
+      include: {
+        scans: {
+          orderBy: { scannedAt: "desc" },
+          take: 1,
+          select: { id: true, scannedAt: true, activeCount: true, totalPinged: true, results: true },
+        },
+      },
     }),
     prisma.softwareAgent.findMany({
       where: { organizationId: user.organizationId },

@@ -28,7 +28,7 @@ RUN npm run build
 FROM node:24-alpine AS runner
 WORKDIR /app
 
-RUN apk add --no-cache libc6-compat openssl postgresql-client iputils bind-tools traceroute && \
+RUN apk add --no-cache libc6-compat openssl postgresql-client iputils bind-tools traceroute fping && \
     addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
 
