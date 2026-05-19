@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { host, port, bindDn, baseDn, userFilter, searchUser } = body;
+  const { host, port, bindDn, baseDn, userFilter, searchUser, testUsername, testPassword } = body;
   let { bindPassword } = body;
 
   if (!host || !bindDn || !baseDn) {
@@ -101,6 +101,44 @@ export async function POST(req: NextRequest) {
           }
 
           clearTimeout(timeout);
+
+          // Direct bind test: find user's DN then try binding as them
+          if (testUsername?.trim() && testPassword) {
+            const q = testUsername.trim().toLowerCase();
+            const trans = q.replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue").replace(/ß/g, "ss");
+            const f = trans !== q
+              ? `(|(sAMAccountName=${q})(sAMAccountName=${trans}))`
+              : `(sAMAccountName=${q})`;
+
+            const ldapConfig2 = await prisma.ldapConfig.findUnique({ where: { organizationId: user.organizationId! }, select: { loginBaseDn: true } });
+            const searchBase2 = ldapConfig2?.loginBaseDn || baseDn;
+
+            client.search(searchBase2, {
+              filter: f, scope: "sub",
+              attributes: ["dn", "userPrincipalName", "sAMAccountName"],
+              sizeLimit: 1,
+            }, (sErr2: Error | null, sr3: any) => {
+              if (sErr2) { done({ ok: false, message: `Suche fehlgeschlagen: ${sErr2.message}` }); return; }
+              let foundDn = ""; let foundUpn = "";
+              sr3.on("searchEntry", (e2: any) => {
+                foundDn = e2.dn.toString();
+                foundUpn = (e2.pojo?.attributes ?? []).find((a: any) => a.type === "userPrincipalName")?.values?.[0] ?? "";
+              });
+              sr3.on("error", (e2: Error) => done({ ok: false, message: `Suche-Fehler: ${e2.message}` }));
+              sr3.on("end", () => {
+                if (!foundDn) { done({ ok: false, message: `Benutzer "${testUsername}" nicht gefunden in ${searchBase2}` }); return; }
+                const bindWith = foundUpn || foundDn;
+                client.bind(bindWith, testPassword, (bindErr2: Error | null) => {
+                  if (bindErr2) {
+                    done({ ok: false, message: `Bind fehlgeschlagen!\nBenutzer: ${foundDn}\nUPN: ${foundUpn || "(keiner)"}\nBind-Name: ${bindWith}\nFehler: ${bindErr2.message}` });
+                  } else {
+                    done({ ok: true, message: `✓ Anmeldung erfolgreich!\nBind-Name: ${bindWith}` });
+                  }
+                });
+              });
+            });
+            return;
+          }
 
           // User-specific search if searchUser is provided
           if (searchUser?.trim()) {

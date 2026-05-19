@@ -18,6 +18,8 @@ export function LdapConfigPanel({ initial }: { initial: InitialConfig | null }) 
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [isTesting, startTest] = useTransition();
   const [searchUser, setSearchUser] = useState("");
+  const [testUsername, setTestUsername] = useState("");
+  const [testPassword, setTestPassword] = useState("");
 
   // Refs to read current form values for the test
   const hostRef = useRef<HTMLInputElement>(null);
@@ -37,7 +39,9 @@ export function LdapConfigPanel({ initial }: { initial: InitialConfig | null }) 
         bindPassword: bindPwRef.current?.value,
         baseDn:      baseDnRef.current?.value?.trim(),
         userFilter:  filterRef.current?.value?.trim() || "(objectClass=person)",
-        searchUser:  searchUser.trim() || undefined,
+        searchUser:   searchUser.trim() || undefined,
+        testUsername: testUsername.trim() || undefined,
+        testPassword: testPassword || undefined,
       };
       try {
         const res = await fetch("/api/admin/ldap-test", {
@@ -156,16 +160,25 @@ export function LdapConfigPanel({ initial }: { initial: InitialConfig | null }) 
               Verbindung testen
             </Button>
             <div className="flex items-center gap-1.5 ml-2">
-              <input
-                type="text"
-                placeholder="Benutzer suchen (z.B. test.saenden)"
-                value={searchUser}
+              <input type="text" placeholder="Benutzer suchen…" value={searchUser}
                 onChange={(e) => setSearchUser(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleTest()}
-                className="h-8 rounded-md border border-border bg-background text-xs px-3 w-52"
-              />
+                className="h-8 rounded-md border border-border bg-background text-xs px-3 w-44" />
               <Button type="button" size="sm" variant="outline" onClick={handleTest} disabled={isTesting || !searchUser.trim()}>
                 Suchen
+              </Button>
+            </div>
+            <div className="flex items-center gap-1.5 ml-2">
+              <input type="text" placeholder="Anmeldung testen: Benutzername"
+                value={testUsername} onChange={(e) => setTestUsername(e.target.value)}
+                className="h-8 rounded-md border border-border bg-background text-xs px-3 w-44" />
+              <input type="password" placeholder="Passwort"
+                value={testPassword} onChange={(e) => setTestPassword(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleTest()}
+                className="h-8 rounded-md border border-border bg-background text-xs px-3 w-32" />
+              <Button type="button" size="sm" variant="outline" onClick={handleTest}
+                disabled={isTesting || !testUsername.trim() || !testPassword}>
+                Anmelden testen
               </Button>
             </div>
           </div>
