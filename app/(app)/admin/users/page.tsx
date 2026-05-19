@@ -11,6 +11,7 @@ import { ExchangeConfigPanel } from "@/components/admin/ExchangeConfigPanel";
 import { HelpdeskAdminPanel } from "@/components/admin/HelpdeskAdminPanel";
 import { LdapConfigPanel } from "@/components/admin/LdapConfigPanel";
 import { PortalUsersPanel } from "@/components/admin/PortalUsersPanel";
+import { OrbisImportPanel } from "@/components/admin/OrbisImportPanel";
 import { OrganizationSettingsPanel } from "@/components/admin/OrganizationSettingsPanel";
 import { isFullSetup } from "@/lib/features";
 import { Users, Clock, CheckCircle2, Ban } from "lucide-react";
@@ -112,6 +113,7 @@ export default async function AdminUsersPage() {
       {isFullSetup && currentUser.organization?.slug && (
         <PortalUsersPanel users={portalUsers} orgSlug={currentUser.organization.slug} />
       )}
+      {isFullSetup && <OrbisImportPanel />}
       {isFullSetup && (
         <LdapConfigPanel initial={ldapConfig ? {
           host: ldapConfig.host, port: ldapConfig.port, bindDn: ldapConfig.bindDn,

@@ -32,6 +32,7 @@ export default async function ContactsPage({
           { email:      { contains: q, mode: "insensitive" } },
           { company:    { contains: q, mode: "insensitive" } },
           { department: { contains: q, mode: "insensitive" } },
+          { externalId: { contains: q, mode: "insensitive" } },
         ],
       } : {}),
     },

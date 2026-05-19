@@ -547,7 +547,9 @@ model TicketContact {
   portalUsers  PortalUser[]
 
   @@unique([organizationId, email])
+  @@unique([organizationId, externalId])
   @@index([organizationId, source])
+  @@index([organizationId, externalId])
   @@map("ticket_contacts")
 }
 
