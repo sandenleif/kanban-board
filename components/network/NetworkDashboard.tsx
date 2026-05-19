@@ -53,18 +53,38 @@ export function NetworkDashboard({ vlans: initial, agents }: { vlans: Vlan[]; ag
       const res = await fetch("/api/admin/network/dhcp-import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "ad" }) });
       const data = await res.json();
       if (!res.ok) {
-        if (data.hint === "text") {
-          toast.error("DHCP nicht in AD gefunden — bitte Subnetze manuell eingeben");
-          setShowTextImport(true);
-        } else {
-          toast.error(data.error.split("\n")[0]);
-        }
+        // DHCP not in AD — auto-detect from agent IPs instead
+        toast.info("DHCP nicht in AD gefunden — erkenne Subnetze aus Agent-IPs…");
+        detectFromAgents();
         return;
       }
       toast.success(`DHCP-Import: ${data.created} neue VLANs, ${data.skipped} übersprungen`);
       window.location.reload();
     } catch { toast.error("DHCP-Import fehlgeschlagen"); }
     finally { setDhcpLoading(false); }
+  };
+
+  // Auto-detect /24 subnets from agent IPs and pre-fill the text import
+  const detectFromAgents = () => {
+    const subnets = new Map<string, number>();
+    agents.forEach((a) => {
+      if (!a.ipAddress) return;
+      const parts = a.ipAddress.split(".");
+      if (parts.length !== 4) return;
+      const subnet = `${parts[0]}.${parts[1]}.${parts[2]}.0/24`;
+      subnets.set(subnet, (subnets.get(subnet) ?? 0) + 1);
+    });
+    if (subnets.size === 0) {
+      toast.error("Keine Agent-IPs vorhanden — bitte Subnetze manuell eingeben");
+      setShowTextImport(true);
+      return;
+    }
+    const lines = [...subnets.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([subnet, count]) => `${subnet} Subnetz ${subnet.split(".").slice(0, 3).join(".")} (${count} Agents)`);
+    setTextSubnets(lines.join("\n"));
+    setShowTextImport(true);
+    toast.success(`${subnets.size} Subnetz${subnets.size > 1 ? "e" : ""} aus Agent-IPs erkannt — Namen anpassen und importieren`);
   };
 
   const importText = async () => {
@@ -181,7 +201,11 @@ export function NetworkDashboard({ vlans: initial, agents }: { vlans: Vlan[]; ag
           </Button>
           <Button size="sm" variant="outline" onClick={importDhcp} disabled={dhcpLoading}>
             {dhcpLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Server className="h-3.5 w-3.5" />}
-            VLANs aus DHCP
+            VLANs importieren
+          </Button>
+          <Button size="sm" variant="outline" onClick={detectFromAgents} disabled={dhcpLoading}>
+            <Wifi className="h-3.5 w-3.5" />
+            Aus Agent-IPs
           </Button>
           <Button size="sm" onClick={() => setShowAddVlan((v) => !v)}>
             <Plus className="h-3.5 w-3.5" /> VLAN manuell
@@ -211,7 +235,7 @@ export function NetworkDashboard({ vlans: initial, agents }: { vlans: Vlan[]; ag
             <button onClick={() => setShowTextImport(false)} className="text-muted-foreground hover:text-foreground text-xs">Schließen</button>
           </div>
           <p className="text-xs text-muted-foreground">
-            Ein Subnet pro Zeile: <code className="bg-muted px-1 rounded">172.29.13.0/24 Management</code>
+            Ein Subnet pro Zeile: <code className="bg-muted px-1 rounded">172.29.13.0/24 Management</code> — Namen vor dem Import anpassen
           </p>
           <textarea
             value={textSubnets}
