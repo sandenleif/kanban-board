@@ -54,8 +54,8 @@ export async function portalLoginAction(
   if (org.ldapConfig?.enabled) {
     const ldapResult = await ldapAuthenticate(org.ldapConfig, identifier, password, { useLoginBaseDn: false });
     if (ldapResult) {
-      // Use the AD email for the portal user record (not the raw identifier)
-      const adEmail = ldapResult.email || email;
+      // Use the AD email (lowercased) or fall back to the typed identifier
+      const adEmail = (ldapResult.email || email).toLowerCase();
       const upserted = await prisma.portalUser.upsert({
         where: { organizationId_email: { organizationId: org.id, email: adEmail } },
         create: {
@@ -77,7 +77,7 @@ export async function portalLoginAction(
       });
       redirect(`/portal/${orgSlug}`);
     }
-    return { error: "Anmeldung fehlgeschlagen. Bitte Netzwerk-Benutzername (vorname.nachname) oder E-Mail prüfen." };
+    return { error: "Benutzername oder Passwort falsch. Bitte Netzwerk-Benutzername (vorname.nachname) verwenden." };
   }
 
   return { error: "Benutzername/E-Mail oder Passwort falsch" };

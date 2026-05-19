@@ -121,10 +121,14 @@ export async function ldapAuthenticate(
             res.on("end", () => {
               if (!userDn) { client.destroy(); resolve(null); return; }
 
-              // Step 3: bind as the user to verify password
+              // Step 3: bind as the user to verify password.
+              // ldapjs needs the raw DN string — non-ASCII chars in CN are fine here
+              // because this is a bind (not a filter assertion).
               client.bind(userDn, password, (userBindErr: Error | null) => {
                 client.destroy();
                 if (userBindErr) { resolve(null); return; }
+                // Normalise email: lowercase to avoid duplicate users on re-login
+                if (userEmail) userEmail = userEmail.toLowerCase();
                 resolve({ dn: userDn, name: userName, username, email: userEmail });
               });
             });

@@ -305,6 +305,17 @@ export async function loginAction(
           organizationId: org!.id,
         },
       });
+
+      // Auto-join the org's first workspace so the user doesn't land on an empty dashboard
+      const defaultWorkspace = await prisma.workspace.findFirst({
+        where: { organizationId: org!.id },
+        orderBy: { createdAt: "asc" },
+      });
+      if (defaultWorkspace) {
+        await prisma.workspaceMember.create({
+          data: { workspaceId: defaultWorkspace.id, userId: user.id, role: "MEMBER" },
+        }).catch(() => {}); // ignore if already a member
+      }
     }
   }
 
