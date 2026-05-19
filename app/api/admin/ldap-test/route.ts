@@ -117,12 +117,46 @@ export async function POST(req: NextRequest) {
             const searchBases = [baseDn];
             if (ldapConfig?.loginBaseDn && ldapConfig.loginBaseDn !== baseDn) searchBases.push(ldapConfig.loginBaseDn);
 
+            // Detailed search: show DN, UPN, mail for each found user
+            type DetailResult = { count: number; details: string[]; err?: string };
+            const runDetailSearch = (filter: string, searchBase: string): Promise<DetailResult> =>
+              new Promise((res2) => {
+                client.search(searchBase, {
+                  filter, scope: "sub",
+                  attributes: ["cn", "displayName", "mail", "sAMAccountName", "userPrincipalName", "userAccountControl"],
+                  sizeLimit: 3,
+                }, (sErr: Error | null, sr2: any) => {
+                  if (sErr) { res2({ count: 0, details: [], err: sErr.message }); return; }
+                  let count = 0;
+                  const details: string[] = [];
+                  const g = (e: any, a: string) => (e?.pojo?.attributes ?? []).find((x: any) => x.type === a)?.values?.[0] ?? "";
+                  sr2.on("searchEntry", (entry: any) => {
+                    count++;
+                    const uac = parseInt(g(entry, "userAccountControl") || "0");
+                    const disabled = (uac & 2) !== 0;
+                    details.push(
+                      `DN: ${entry.dn.toString()}` +
+                      `\nUPN: ${g(entry, "userPrincipalName") || "(nicht gesetzt)"}` +
+                      `\nMail: ${g(entry, "mail") || "(nicht gesetzt)"}` +
+                      `\nsAMAccountName: ${g(entry, "sAMAccountName")}` +
+                      `\nKonto: ${disabled ? "DEAKTIVIERT ⚠️" : "aktiv"}`
+                    );
+                  });
+                  sr2.on("error", (e: Error) => res2({ count, details, err: e.message }));
+                  sr2.on("end", () => res2({ count, details }));
+                });
+              });
+
             const msgs: string[] = [];
             for (const base of searchBases) {
-              const r = await runSearch(userSearchFilter, base);
-              msgs.push(`Suche in "${base}": ${r.count} Treffer${r.samples.length ? ` — ${r.samples.join(", ")}` : ""}${r.err ? ` (Fehler: ${r.err})` : ""}`);
+              const r = await runDetailSearch(userSearchFilter, base);
+              if (r.count > 0) {
+                msgs.push(`Suche in "${base}": ${r.count} Treffer\n${r.details.join("\n---\n")}`);
+              } else {
+                msgs.push(`Suche in "${base}": 0 Treffer${r.err ? ` (${r.err})` : ""}`);
+              }
             }
-            done({ ok: msgs.some((m) => m.includes("1 Treffer") || m.includes("Treffer") && !m.includes("0 Treffer")), message: msgs.join("\n") });
+            done({ ok: msgs.some((m) => m.includes("1 Treffer") || (m.includes("Treffer") && !m.includes("0 Treffer"))), message: msgs.join("\n\n") });
             return;
           }
 

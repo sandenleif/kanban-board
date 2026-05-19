@@ -127,9 +127,13 @@ export async function ldapAuthenticate(
               // Prefer UPN (user@domain) over DN — UPN is always ASCII and avoids
               // ldapjs encoding issues when the CN contains non-ASCII chars (umlauts).
               const bindName = userUpn || userDn;
+              console.log(`[LDAP] Bind attempt: "${bindName}" (upn=${!!userUpn}, dn="${userDn.slice(0, 60)}")`);
               client.bind(bindName, password, (userBindErr: Error | null) => {
                 client.destroy();
-                if (userBindErr) { resolve(null); return; }
+                if (userBindErr) {
+                  console.log(`[LDAP] Bind failed: ${userBindErr.message}`);
+                  resolve(null); return;
+                }
                 // Normalise email: lowercase to avoid duplicate users on re-login
                 if (userEmail) userEmail = userEmail.toLowerCase();
                 resolve({ dn: userDn, name: userName, username, email: userEmail });
