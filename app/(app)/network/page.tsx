@@ -20,7 +20,7 @@ export default async function NetworkPage() {
     }),
     prisma.softwareAgent.findMany({
       where: { organizationId: user.organizationId },
-      select: { hostname: true, ipAddress: true, osVersion: true, lastSeenAt: true, manufacturer: true, model: true },
+      select: { hostname: true, ipAddress: true, osVersion: true, lastSeenAt: true, manufacturer: true, model: true, vlanId: true },
     }),
   ]);
 

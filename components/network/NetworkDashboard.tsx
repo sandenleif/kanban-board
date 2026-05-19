@@ -38,11 +38,25 @@ export function NetworkDashboard({ vlans: initial, agents }: { vlans: Vlan[]; ag
   const [vlans, setVlans] = useState(initial);
   const [adComputers, setAdComputers] = useState<AdComputer[]>([]);
   const [adLoading, setAdLoading] = useState(false);
+  const [dhcpLoading, setDhcpLoading] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [newVlan, setNewVlan] = useState({ name: "", subnet: "", gateway: "", description: "" });
   const [showAddVlan, setShowAddVlan] = useState(false);
   const [expandedVlan, setExpandedVlan] = useState<string | null>(null);
   const [visibleClients, setVisibleClients] = useState<Record<string, number>>({});
+
+  const importDhcp = async () => {
+    setDhcpLoading(true);
+    try {
+      const res = await fetch("/api/admin/network/dhcp-import", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.error); return; }
+      toast.success(`DHCP-Import: ${data.created} neue VLANs, ${data.skipped} übersprungen`);
+      // Reload page to show new VLANs
+      window.location.reload();
+    } catch { toast.error("DHCP-Import fehlgeschlagen"); }
+    finally { setDhcpLoading(false); }
+  };
 
   const loadAdComputers = async () => {
     setAdLoading(true);
@@ -125,13 +139,17 @@ export function NetworkDashboard({ vlans: initial, agents }: { vlans: Vlan[]; ag
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">{vlans.length} VLANs · {agents.length} Agents</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Button size="sm" variant="outline" onClick={loadAdComputers} disabled={adLoading}>
             {adLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
             AD-Scan
           </Button>
+          <Button size="sm" variant="outline" onClick={importDhcp} disabled={dhcpLoading}>
+            {dhcpLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Server className="h-3.5 w-3.5" />}
+            VLANs aus DHCP
+          </Button>
           <Button size="sm" onClick={() => setShowAddVlan((v) => !v)}>
-            <Plus className="h-3.5 w-3.5" /> VLAN
+            <Plus className="h-3.5 w-3.5" /> VLAN manuell
           </Button>
         </div>
       </div>

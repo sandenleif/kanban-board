@@ -177,11 +177,6 @@ function BoardColumnInner({ column, projectId, canEdit, currentUserId, workspace
           </div>
         )}
 
-        {column._count && column._count.tasks > column.tasks.length && (
-          <div className="text-center text-xs text-yellow-400 bg-yellow-400/10 rounded-lg px-2 py-1.5 shrink-0">
-            ⚠ {column.tasks.length} von {column._count.tasks} Tasks geladen
-          </div>
-        )}
 
         {canEdit && (
           <div className="mt-1 shrink-0">

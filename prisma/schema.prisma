@@ -708,6 +708,7 @@ model SoftwareAgent {
   diskGb         Int?
   domain         String?
   assetId           String?   @unique // linked inventory asset (1:1)
+  vlanId            String?   // auto-assigned from IP + VLAN definitions
   agentVersion      String?
   installedSoftware Json?
   apiKey            String    @unique @default(cuid())

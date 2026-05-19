@@ -62,6 +62,24 @@ export async function POST(req: NextRequest) {
   }
   const hostname = hardware.hostname.trim().toLowerCase();
 
+  // Auto-detect VLAN from IP address
+  let vlanId: string | null = null;
+  if (hardware.ipAddress) {
+    const vlans = await prisma.networkVlan.findMany({
+      where: { organizationId: orgId },
+      select: { id: true, subnet: true },
+    });
+    for (const vlan of vlans) {
+      try {
+        const [subnetIp, prefix] = vlan.subnet.split("/");
+        const mask = prefix === "32" ? 0xffffffff : (~(2 ** (32 - parseInt(prefix)) - 1)) >>> 0;
+        const ipNum  = hardware.ipAddress.split(".").reduce((a, o) => (a << 8) | parseInt(o), 0) >>> 0;
+        const netNum = subnetIp.split(".").reduce((a, o) => (a << 8) | parseInt(o), 0) >>> 0;
+        if ((ipNum & mask) === (netNum & mask)) { vlanId = vlan.id; break; }
+      } catch { /* skip malformed subnet */ }
+    }
+  }
+
   // Upsert agent — create or update hardware info
   const agentData = {
     ipAddress:    hardware.ipAddress    ?? null,
@@ -77,6 +95,7 @@ export async function POST(req: NextRequest) {
     domain:       hardware.domain       ?? null,
     agentVersion:      hardware.agentVersion     ?? null,
     installedSoftware: hardware.installedSoftware ?? undefined,
+    vlanId:            vlanId,
     lastSeenAt:        new Date(),
   };
 
