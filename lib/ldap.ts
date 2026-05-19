@@ -97,7 +97,7 @@ export async function ldapAuthenticate(
         // Step 2: find the user
         client.search(
           searchBase,
-          { filter, scope: "sub", attributes: ["dn", "cn", "displayName", "mail", "sAMAccountName"], sizeLimit: 2 },
+          { filter, scope: "sub", attributes: ["dn", "cn", "displayName", "mail", "sAMAccountName", "userPrincipalName"], sizeLimit: 2 },
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (searchErr: Error | null, res: any) => {
             if (searchErr) { client.destroy(); resolve(null); return; }
@@ -106,6 +106,7 @@ export async function ldapAuthenticate(
             let userName = "";
             let userEmail = "";
             let username = "";
+            let userUpn = "";
 
             res.on("searchReference", () => {});
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -116,15 +117,17 @@ export async function ldapAuthenticate(
               userName  = get("displayName") || get("cn");
               userEmail = get("mail") || (isEmail ? identifier : `${identifier}@${config.baseDn.replace(/^dc=/i, "").replace(/,dc=/gi, ".")}`);
               username  = get("sAMAccountName") || identifier;
+              userUpn   = get("userPrincipalName"); // preferred for bind — avoids DN non-ASCII issues
             });
             res.on("error", () => { client.destroy(); resolve(null); });
             res.on("end", () => {
               if (!userDn) { client.destroy(); resolve(null); return; }
 
               // Step 3: bind as the user to verify password.
-              // ldapjs needs the raw DN string — non-ASCII chars in CN are fine here
-              // because this is a bind (not a filter assertion).
-              client.bind(userDn, password, (userBindErr: Error | null) => {
+              // Prefer UPN (user@domain) over DN — UPN is always ASCII and avoids
+              // ldapjs encoding issues when the CN contains non-ASCII chars (umlauts).
+              const bindName = userUpn || userDn;
+              client.bind(bindName, password, (userBindErr: Error | null) => {
                 client.destroy();
                 if (userBindErr) { resolve(null); return; }
                 // Normalise email: lowercase to avoid duplicate users on re-login
