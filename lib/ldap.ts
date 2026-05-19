@@ -123,21 +123,38 @@ export async function ldapAuthenticate(
             res.on("end", () => {
               if (!userDn) { client.destroy(); resolve(null); return; }
 
-              // Step 3: bind as the user to verify password.
-              // Prefer UPN (user@domain) over DN — UPN is always ASCII and avoids
-              // ldapjs encoding issues when the CN contains non-ASCII chars (umlauts).
-              const bindName = userUpn || userDn;
-              console.log(`[LDAP] Bind attempt: "${bindName}" (upn=${!!userUpn}, dn="${userDn.slice(0, 60)}")`);
-              client.bind(bindName, password, (userBindErr: Error | null) => {
-                client.destroy();
-                if (userBindErr) {
-                  console.log(`[LDAP] Bind failed: ${userBindErr.message}`);
-                  resolve(null); return;
-                }
-                // Normalise email: lowercase to avoid duplicate users on re-login
+              // Step 3: verify password by binding as the user.
+              // Try DN first (most compatible with AD), fall back to UPN only when
+              // the DN contains non-ASCII chars (umlauts) that ldapjs may encode
+              // incorrectly, causing the bind to fail.
+              const dnHasNonAscii = /[^\x00-\x7F\\]/.test(userDn);
+
+              const doResolve = () => {
                 if (userEmail) userEmail = userEmail.toLowerCase();
                 resolve({ dn: userDn, name: userName, username, email: userEmail });
-              });
+              };
+
+              const bindWithFallback = (primary: string, secondary?: string) => {
+                client.bind(primary, password, (err1: Error | null) => {
+                  if (!err1) { client.destroy(); doResolve(); return; }
+                  if (secondary) {
+                    client.bind(secondary, password, (err2: Error | null) => {
+                      client.destroy();
+                      if (!err2) { doResolve(); } else { resolve(null); }
+                    });
+                  } else {
+                    client.destroy(); resolve(null);
+                  }
+                });
+              };
+
+              if (dnHasNonAscii && userUpn) {
+                // Umlaut in DN: try UPN first, DN as fallback
+                bindWithFallback(userUpn, userDn);
+              } else {
+                // Normal case: DN first, UPN as fallback
+                bindWithFallback(userDn, userUpn || undefined);
+              }
             });
           }
         );
