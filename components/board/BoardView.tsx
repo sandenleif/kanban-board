@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useTransition, useEffect, useRef } from "react";
+import { useState, useCallback, useTransition, useEffect, useRef, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import {
@@ -44,6 +44,7 @@ export type TaskType = {
 export type ColumnType = {
   id: string; name: string; position: number; color: string | null;
   sectionId: string; tasks: TaskType[];
+  _count?: { tasks: number };
 };
 
 export type SectionType = {
@@ -81,6 +82,12 @@ export function BoardView({ project, workspaceId, canEdit, currentUserId, worksp
   const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
   const [editingSectionName, setEditingSectionName] = useState("");
   const [filterSearch, setFilterSearch] = useState("");
+  // Debounce search so filter doesn't recompute on every keystroke
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedSearch(filterSearch), 200);
+    return () => clearTimeout(id);
+  }, [filterSearch]);
 
   // Keep ref in sync so interval closure sees latest value
   useEffect(() => { activeTaskRef.current = activeTask; }, [activeTask]);
@@ -120,14 +127,14 @@ export function BoardView({ project, workspaceId, canEdit, currentUserId, worksp
   }, [sections]);
 
   const findColumn = useCallback((id: string) => allColumns.find((c) => c.id === id), [allColumns]);
-  const updateSections = (updater: (prev: SectionType[]) => SectionType[]) => setSections(updater);
+  const updateSections = useCallback((updater: (prev: SectionType[]) => SectionType[]) => setSections(updater), []);
 
-  const handleDragStart = (event: DragStartEvent) => {
+  const handleDragStart = useCallback((event: DragStartEvent) => {
     const found = findTaskAndColumn(event.active.id as string);
     if (found) setActiveTask(found.task);
-  };
+  }, [findTaskAndColumn]);
 
-  const handleDragOver = (event: DragOverEvent) => {
+  const handleDragOver = useCallback((event: DragOverEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
     const activeResult = findTaskAndColumn(active.id as string);
@@ -135,10 +142,10 @@ export function BoardView({ project, workspaceId, canEdit, currentUserId, worksp
     const overColumnId = findColumn(over.id as string) ? (over.id as string) : findTaskAndColumn(over.id as string)?.column.id;
     if (!overColumnId || activeResult.column.id === overColumnId) return;
 
-    updateSections((prev) => prev.map((section) => {
-      const srcColIdx = section.columns.findIndex((c) => c.id === activeResult.column.id);
-      const dstColIdx = section.columns.findIndex((c) => c.id === overColumnId);
-      if (srcColIdx === -1 && dstColIdx === -1) return section;
+    setSections((prev) => prev.map((section) => {
+      const hasSrc = section.columns.some((c) => c.id === activeResult.column.id);
+      const hasDst = section.columns.some((c) => c.id === overColumnId);
+      if (!hasSrc && !hasDst) return section; // skip sections not involved
       const newColumns = section.columns.map((col) => ({ ...col, tasks: [...col.tasks] }));
       const srcCol = newColumns.find((c) => c.id === activeResult.column.id);
       const dstCol = newColumns.find((c) => c.id === overColumnId);
@@ -152,9 +159,9 @@ export function BoardView({ project, workspaceId, canEdit, currentUserId, worksp
       dstCol.tasks.forEach((t, i) => (t.position = i));
       return { ...section, columns: newColumns };
     }));
-  };
+  }, [findTaskAndColumn, findColumn]);
 
-  const handleDragEnd = (event: DragEndEvent) => {
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;
     setActiveTask(null);
     if (!over || active.id === over.id) return;
@@ -164,7 +171,7 @@ export function BoardView({ project, workspaceId, canEdit, currentUserId, worksp
       const result = await moveTaskAction({ taskId: active.id as string, columnId: task.columnId, position: task.position, projectId: project.id });
       if (result.error) { toast.error(result.error); setSections(project.sections); }
     });
-  };
+  }, [sections, project.id, project.sections]);
 
   const handleAddColumn = () => {
     if (!newColumnName.trim() || !activeSection) return;
@@ -238,23 +245,26 @@ export function BoardView({ project, workspaceId, canEdit, currentUserId, worksp
     });
   };
 
-  const handleTaskCreated = (task: TaskType) => {
-    updateSections((prev) => prev.map((s) => ({ ...s, columns: s.columns.map((col) => col.id === task.columnId ? { ...col, tasks: [...col.tasks, task] } : col) })));
-  };
+  const handleTaskCreated = useCallback((task: TaskType) => {
+    setSections((prev) => prev.map((s) => ({ ...s, columns: s.columns.map((col) => col.id === task.columnId ? { ...col, tasks: [...col.tasks, task] } : col) })));
+  }, []);
 
-  const handleColumnsChange = (updater: (prev: ColumnType[]) => ColumnType[]) => {
-    updateSections((prev) => prev.map((s) => s.id === activeSectionId ? { ...s, columns: updater(s.columns) } : s));
-  };
+  const handleColumnsChange = useCallback((updater: (prev: ColumnType[]) => ColumnType[]) => {
+    setSections((prev) => prev.map((s) => s.id === activeSectionId ? { ...s, columns: updater(s.columns) } : s));
+  }, [activeSectionId]);
 
-  const filteredColumns = allColumns.map((col) => ({
-    ...col,
-    tasks: col.tasks.filter((t) =>
-      !filterSearch ||
-      t.title.toLowerCase().includes(filterSearch.toLowerCase()) ||
-      t.description?.toLowerCase().includes(filterSearch.toLowerCase()) ||
-      t.assignees.some((a) => a.user.name.toLowerCase().includes(filterSearch.toLowerCase()))
-    ),
-  }));
+  const filteredColumns = useMemo(() => {
+    if (!debouncedSearch) return allColumns;
+    const q = debouncedSearch.toLowerCase();
+    return allColumns.map((col) => ({
+      ...col,
+      tasks: col.tasks.filter((t) =>
+        t.title.toLowerCase().includes(q) ||
+        t.description?.toLowerCase().includes(q) ||
+        t.assignees.some((a) => a.user.name.toLowerCase().includes(q))
+      ),
+    }));
+  }, [allColumns, debouncedSearch]);
 
   return (
     <div className="flex flex-col h-full">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, memo } from "react";
 import { useTranslations } from "next-intl";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
@@ -35,7 +35,7 @@ interface BoardColumnProps {
   allColumns: ColumnType[];
 }
 
-export function BoardColumn({ column, projectId, canEdit, currentUserId, workspaceMembers, onTaskClick, onTaskCreated, onColumnsChange }: BoardColumnProps) {
+function BoardColumnInner({ column, projectId, canEdit, currentUserId, workspaceMembers, onTaskClick, onTaskCreated, onColumnsChange }: BoardColumnProps) {
   const t = useTranslations("board");
   const [showAddTask, setShowAddTask] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState("");
@@ -105,7 +105,7 @@ export function BoardColumn({ column, projectId, canEdit, currentUserId, workspa
   };
 
   return (
-    <div className="flex flex-col w-72 shrink-0 h-full">
+    <div className="flex flex-col w-72 shrink-0 h-full" data-column-id={column.id}>
       <div className="flex items-center justify-between mb-3 group">
         {editingName ? (
           <div className="flex items-center gap-1 flex-1">
@@ -177,6 +177,12 @@ export function BoardColumn({ column, projectId, canEdit, currentUserId, workspa
           </div>
         )}
 
+        {column._count && column._count.tasks > column.tasks.length && (
+          <div className="text-center text-xs text-yellow-400 bg-yellow-400/10 rounded-lg px-2 py-1.5 shrink-0">
+            ⚠ {column.tasks.length} von {column._count.tasks} Tasks geladen
+          </div>
+        )}
+
         {canEdit && (
           <div className="mt-1 shrink-0">
             {showAddTask ? (
@@ -217,3 +223,14 @@ export function BoardColumn({ column, projectId, canEdit, currentUserId, workspa
     </div>
   );
 }
+
+// Re-render only when the column's task list, name, or canEdit actually changes.
+export const BoardColumn = memo(BoardColumnInner, (prev, next) => {
+  return (
+    prev.column.id     === next.column.id &&
+    prev.column.name   === next.column.name &&
+    prev.column.color  === next.column.color &&
+    prev.column.tasks  === next.column.tasks && // reference equality — same array = no change
+    prev.canEdit       === next.canEdit
+  );
+});

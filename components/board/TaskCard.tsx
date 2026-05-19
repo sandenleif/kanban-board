@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { cn, formatDate, isOverdue, PRIORITY_COLORS } from "@/lib/utils";
@@ -15,7 +16,7 @@ interface TaskCardProps {
   onTaskClick: (task: TaskType) => void;
 }
 
-export function TaskCard({ task, isDragging, canEdit, onTaskClick }: TaskCardProps) {
+function TaskCardInner({ task, isDragging, canEdit, onTaskClick }: TaskCardProps) {
   const {
     attributes,
     listeners,
@@ -67,27 +68,13 @@ export function TaskCard({ task, isDragging, canEdit, onTaskClick }: TaskCardPro
 
         <div className="flex items-center justify-between mt-2.5 gap-2">
           <div className="flex items-center gap-2">
-            <span
-              className={cn(
-                "text-xs rounded-md px-1.5 py-0.5 font-medium",
-                PRIORITY_COLORS[task.priority]
-              )}
-            >
+            <span className={cn("text-xs rounded-md px-1.5 py-0.5 font-medium", PRIORITY_COLORS[task.priority])}>
               {task.priority === "URGENT" ? "!!!" : task.priority[0]}
             </span>
 
             {task.dueDate && (
-              <span
-                className={cn(
-                  "flex items-center gap-0.5 text-xs",
-                  overdue ? "text-red-400" : "text-muted-foreground"
-                )}
-              >
-                {overdue ? (
-                  <AlertTriangle className="h-3 w-3" />
-                ) : (
-                  <CalendarClock className="h-3 w-3" />
-                )}
+              <span className={cn("flex items-center gap-0.5 text-xs", overdue ? "text-red-400" : "text-muted-foreground")}>
+                {overdue ? <AlertTriangle className="h-3 w-3" /> : <CalendarClock className="h-3 w-3" />}
                 {formatDate(task.dueDate)}
               </span>
             )}
@@ -96,14 +83,12 @@ export function TaskCard({ task, isDragging, canEdit, onTaskClick }: TaskCardPro
           <div className="flex items-center gap-2 shrink-0">
             {task._count.comments > 0 && (
               <span className="flex items-center gap-0.5 text-xs text-muted-foreground">
-                <MessageSquare className="h-3 w-3" />
-                {task._count.comments}
+                <MessageSquare className="h-3 w-3" />{task._count.comments}
               </span>
             )}
             {task._count.checklist > 0 && (
               <span className="flex items-center gap-0.5 text-xs text-muted-foreground">
-                <CheckSquare className="h-3 w-3" />
-                {task._count.checklist}
+                <CheckSquare className="h-3 w-3" />{task._count.checklist}
               </span>
             )}
             {task.assignees.length > 0 && (
@@ -128,3 +113,22 @@ export function TaskCard({ task, isDragging, canEdit, onTaskClick }: TaskCardPro
     </div>
   );
 }
+
+// Custom equality: only re-render if task content actually changed.
+// Skips re-render for unrelated parent state updates (drag position, filter, etc.)
+export const TaskCard = memo(TaskCardInner, (prev, next) => {
+  return (
+    prev.task.id          === next.task.id &&
+    prev.task.title       === next.task.title &&
+    prev.task.priority    === next.task.priority &&
+    prev.task.dueDate     === next.task.dueDate &&
+    prev.task.columnId    === next.task.columnId &&
+    prev.task.position    === next.task.position &&
+    prev.task._count.comments  === next.task._count.comments &&
+    prev.task._count.checklist === next.task._count.checklist &&
+    prev.task.assignees.length === next.task.assignees.length &&
+    prev.task.labels.length    === next.task.labels.length &&
+    prev.isDragging === next.isDragging &&
+    prev.canEdit    === next.canEdit
+  );
+});

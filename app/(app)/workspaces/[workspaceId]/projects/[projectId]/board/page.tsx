@@ -31,6 +31,7 @@ export default async function BoardPage({
             include: {
               tasks: {
                 orderBy: { position: "asc" },
+                take: 250, // cap per column — beyond 250 tasks performance degrades
                 include: {
                   assignees: { include: { user: { select: { id: true, name: true, avatarUrl: true } } } },
                   createdBy: { select: { id: true, name: true } },
@@ -38,6 +39,7 @@ export default async function BoardPage({
                   _count: { select: { comments: true, checklist: true } },
                 },
               },
+              _count: { select: { tasks: true } },
             },
           },
         },
