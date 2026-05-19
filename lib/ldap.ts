@@ -18,6 +18,27 @@ export type LdapUser = {
 };
 
 /**
+ * Escape a value for use inside an LDAP filter assertion (RFC 4515).
+ * Non-ASCII characters (e.g. umlauts) are encoded as \xx hex bytes.
+ */
+function ldapEscape(value: string): string {
+  let result = "";
+  for (const char of value) {
+    const code = char.charCodeAt(0);
+    if (code > 127) {
+      const bytes = Buffer.from(char, "utf8");
+      for (const byte of bytes) result += "\\" + byte.toString(16).padStart(2, "0");
+    } else if (char === "\\") result += "\\5c";
+    else if (char === "*")  result += "\\2a";
+    else if (char === "(")  result += "\\28";
+    else if (char === ")")  result += "\\29";
+    else if (char === "\0") result += "\\00";
+    else result += char;
+  }
+  return result;
+}
+
+/**
  * Authenticate a user against LDAP.
  * - identifier can be an email address OR a plain sAMAccountName (e.g. "leif.sanden")
  * - useLoginBaseDn: true = restrict search to loginBaseDn (main app), false = use full baseDn (portal)
@@ -43,15 +64,18 @@ export async function ldapAuthenticate(
     // (AD stores "johannes.boehmler" but user may type "johannes.böhmler")
     let idFilter: string;
     if (isEmail) {
-      idFilter = `(|(mail=${identifier})(userPrincipalName=${identifier}))`;
+      const esc = ldapEscape(identifier);
+      idFilter = `(|(mail=${esc})(userPrincipalName=${esc}))`;
     } else {
       const transliterated = identifier
         .replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue")
         .replace(/Ä/g, "Ae").replace(/Ö/g, "Oe").replace(/Ü/g, "Ue")
         .replace(/ß/g, "ss");
+      const escOrig  = ldapEscape(identifier);
+      const escTrans = ldapEscape(transliterated);
       idFilter = transliterated !== identifier
-        ? `(|(sAMAccountName=${identifier})(sAMAccountName=${transliterated}))`
-        : `(sAMAccountName=${identifier})`;
+        ? `(|(sAMAccountName=${escOrig})(sAMAccountName=${escTrans}))`
+        : `(sAMAccountName=${escOrig})`;
     }
     const filter = `(&${config.userFilter}${idFilter})`;
 

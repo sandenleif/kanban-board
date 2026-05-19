@@ -277,7 +277,7 @@ export async function loginAction(
       return { error: "Benutzername oder Passwort falsch" };
     }
 
-    const ldapUser = await ldapAuthenticate(ldapCfg, identifier, parsed.data.password);
+    const ldapUser = await ldapAuthenticate(ldapCfg, identifier, parsed.data.password, { useLoginBaseDn: true });
 
     if (!ldapUser) {
       return { error: "Benutzername oder Passwort falsch" };
