@@ -122,18 +122,24 @@ export function NetworkDashboard({ vlans: initial, agents }: { vlans: Vlan[]; ag
       });
       const data = await res.json();
       if (!res.ok) { toast.error(data.error ?? "Scan fehlgeschlagen"); return; }
-      toast.success(`${vlanName}: ${data.activeCount} von ${data.totalPinged} IPs aktiv`);
-      // Update local scan result
-      setScanResults((prev) => ({
-        ...prev,
-        [vlanId]: {
-          id: data.scanId,
-          scannedAt: new Date(),
-          activeCount: data.activeCount,
-          totalPinged: data.totalPinged,
-          results: [], // full results loaded on expand
-        },
-      }));
+
+      if (data.mode === "agent") {
+        // Job dispatched to agent — result comes back asynchronously
+        toast.success(`Job an ${data.agent} gesendet — Ergebnis in ~2 Min im Dashboard`);
+      } else {
+        // Direct scan result available immediately
+        toast.success(`${vlanName}: ${data.activeCount} von ${data.totalPinged} IPs aktiv`);
+        setScanResults((prev) => ({
+          ...prev,
+          [vlanId]: {
+            id: data.scanId,
+            scannedAt: new Date(),
+            activeCount: data.activeCount,
+            totalPinged: data.totalPinged,
+            results: [],
+          },
+        }));
+      }
     } catch (e) { toast.error(`Scan fehlgeschlagen: ${e}`); }
     finally { setScanning(null); }
   };
