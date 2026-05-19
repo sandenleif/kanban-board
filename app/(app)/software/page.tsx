@@ -22,10 +22,14 @@ export default async function SoftwarePage() {
     }),
     prisma.softwareAgent.findMany({
       where: { organizationId: orgId },
-      include: {
-        _count: { select: { jobs: true } },
-        asset: { select: { name: true } },
-        groups: { select: { groupId: true } },
+      select: {
+        id: true, hostname: true, ipAddress: true, lastSeenAt: true,
+        agentVersion: true,
+        asset:         { select: { name: true } },
+        groups:        { select: { groupId: true } },
+        pendingUpdates: true,
+        updatesCheckedAt: true,
+        _count:        { select: { jobs: true } },
       },
       orderBy: { hostname: "asc" },
     }),

@@ -30,7 +30,7 @@ param(
 # ============================================================
 
 # Agent-Version - bei jedem Update erhoehen
-$AgentVersion    = "1.3.0"
+$AgentVersion    = "1.4.0"
 
 # Freie PowerShell-Scripts vom Server: STANDARDMAESSIG DEAKTIVIERT
 # Sicherheitshinweis: Der Agent laeuft als SYSTEM. Beliebige Remote-Scripts
@@ -84,6 +84,9 @@ $TempDir         = "$env:TEMP\KanbanFlow"
 # Heartbeat (Hardware-Inventar) nur alle X Minuten senden.
 # Jobs werden bei JEDEM Tick (1 Min) abgerufen.
 $HeartbeatIntervalMinutes = 5
+
+# Windows Updates einmal taeglich pruefen (in Stunden)
+$UpdateCheckIntervalHours = 24
 
 $ErrorActionPreference = "Stop"
 
@@ -318,6 +321,27 @@ function Get-InstalledSoftware {
     }
 
     return ($apps | Sort-Object { $_["name"] })
+}
+
+function Get-PendingWindowsUpdates {
+    # Prueft ausstehende Windows Updates ueber die Windows Update Agent API.
+    # Laeuft nur einmal taeglich (LastUpdateScan in Registry).
+    # Gibt Array von {title, severity, kb} zurueck, max. 50 Eintraege.
+    $updates = @()
+    try {
+        $session  = New-Object -ComObject Microsoft.Update.Session -ErrorAction Stop
+        $searcher = $session.CreateUpdateSearcher()
+        $result   = $searcher.Search("IsInstalled=0 and Type='Software' and IsHidden=0")
+        foreach ($u in $result.Updates) {
+            $kb = if ($u.KBArticleIDs.Count -gt 0) { "KB" + $u.KBArticleIDs.Item(0) } else { "" }
+            $sev = if ($u.MsrcSeverity) { $u.MsrcSeverity } else { "Low" }
+            $updates += @{ title = $u.Title; severity = $sev; kb = $kb }
+            if ($updates.Count -ge 50) { break }
+        }
+    } catch {
+        Write-Log "Windows Update Scan fehlgeschlagen: $_" "WARN"
+    }
+    return $updates
 }
 
 # ============================================================
@@ -918,8 +942,20 @@ function Start-AgentLoop {
 
     if ($doHeartbeat) {
         try {
-            $hw   = Get-HardwareInfo
-            $body = @{ enrollmentToken = $null; hardware = $hw } | ConvertTo-Json -Depth 3
+            $hw = Get-HardwareInfo
+
+            # Windows Updates einmal taeglich pruefen
+            $lastUpdateStr = (Get-ItemProperty -Path $RegistryPath -Name "LastUpdateScan" -ErrorAction SilentlyContinue).LastUpdateScan
+            $lastUpdate    = if ($lastUpdateStr) { [datetime]$lastUpdateStr } else { [datetime]::MinValue }
+            if (([datetime]::UtcNow - $lastUpdate).TotalHours -ge $UpdateCheckIntervalHours) {
+                Write-Log "Pruefe ausstehende Windows Updates..."
+                $hw.pendingUpdates = Get-PendingWindowsUpdates
+                $hw.updatesCheckedAt = [datetime]::UtcNow.ToString("o")
+                Set-ItemProperty -Path $RegistryPath -Name "LastUpdateScan" -Value ([datetime]::UtcNow.ToString("o"))
+                Write-Log "$($hw.pendingUpdates.Count) ausstehende Updates gefunden."
+            }
+
+            $body = @{ enrollmentToken = $null; hardware = $hw } | ConvertTo-Json -Depth 4
             Invoke-AgentApi -ServerUrl $ServerUrl -ApiKey $ApiKey `
                 -Path "/api/agent/register" -Method "POST" -Body $body | Out-Null
             Set-ItemProperty -Path $RegistryPath -Name "LastHeartbeat" -Value ([datetime]::UtcNow.ToString("o"))

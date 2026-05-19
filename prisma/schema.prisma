@@ -720,6 +720,8 @@ model SoftwareAgent {
   vlanId            String?   // auto-assigned from IP + VLAN definitions
   agentVersion      String?
   installedSoftware Json?
+  pendingUpdates    Json?     // [{title, severity, kb}] — checked daily
+  updatesCheckedAt  DateTime?
   apiKey            String    @unique @default(cuid())
   lastSeenAt     DateTime?
   createdAt      DateTime  @default(now())

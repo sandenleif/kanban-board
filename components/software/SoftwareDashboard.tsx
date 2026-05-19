@@ -13,10 +13,12 @@ import { toast } from "sonner";
 import type { JobStatus } from "@prisma/client";
 
 type Pkg   = { id: string; name: string; version: string | null; type: string; _count: { jobs: number } };
+type PendingUpdate = { title: string; severity: string; kb: string };
 type Agent = {
   id: string; hostname: string; ipAddress: string | null; lastSeenAt: Date | null;
   agentVersion: string | null; asset: { name: string } | null;
-  groups: { groupId: string }[]; _count: { jobs: number }
+  groups: { groupId: string }[]; _count: { jobs: number };
+  pendingUpdates: unknown; updatesCheckedAt: Date | null;
 };
 type Group = { id: string; name: string; _count: { members: number } };
 type Job   = { id: string; status: JobStatus; createdAt: Date; package: { id: string; name: string }; agent: { id: string; hostname: string } };
@@ -150,7 +152,7 @@ export function SoftwareDashboard({ packages, agents, groups, recentJobs, isAdmi
         )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Packages */}
         <div className="lg:col-span-1 space-y-3">
           <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
@@ -322,6 +324,81 @@ export function SoftwareDashboard({ packages, agents, groups, recentJobs, isAdmi
               </div>
             </div>
           )}
+        </div>
+
+        {/* Windows Updates */}
+        <div className="lg:col-span-1 space-y-3">
+          {(() => {
+            const SEV_COLOR: Record<string, string> = {
+              Critical:  "text-red-400 bg-red-400/10 border-red-400/20",
+              Important: "text-orange-400 bg-orange-400/10 border-orange-400/20",
+              Moderate:  "text-yellow-400 bg-yellow-400/10 border-yellow-400/20",
+              Low:       "text-muted-foreground bg-muted border-border",
+            };
+            const agentsWithUpdates = agents
+              .map((a) => ({
+                ...a,
+                updates: Array.isArray(a.pendingUpdates) ? (a.pendingUpdates as PendingUpdate[]) : [],
+              }))
+              .filter((a) => a.updates.length > 0)
+              .sort((a, b) => {
+                const sev = (u: PendingUpdate[]) => u.some((x) => x.severity === "Critical") ? 0 : u.some((x) => x.severity === "Important") ? 1 : 2;
+                return sev(a.updates) - sev(b.updates);
+              });
+
+            const totalUpdates = agentsWithUpdates.reduce((s, a) => s + a.updates.length, 0);
+            const hasChecked = agents.some((a) => a.updatesCheckedAt);
+
+            return (
+              <>
+                <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-primary" /> Windows Updates
+                  {totalUpdates > 0 && (
+                    <span className="text-xs font-medium text-red-400 bg-red-400/10 rounded-full px-2 py-0.5">{totalUpdates} ausstehend</span>
+                  )}
+                </h2>
+
+                {!hasChecked ? (
+                  <div className="rounded-lg border border-dashed border-border bg-muted/20 px-3 py-4 text-center">
+                    <p className="text-xs text-muted-foreground">Noch keine Daten — Agents prüfen täglich auf Updates</p>
+                    <p className="text-[10px] text-muted-foreground/60 mt-1">Erster Check nach Agent-Update auf v1.4.0</p>
+                  </div>
+                ) : agentsWithUpdates.length === 0 ? (
+                  <div className="rounded-lg border border-green-400/20 bg-green-400/5 px-3 py-2.5 text-xs text-green-400 flex items-center gap-2">
+                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0" /> Alle PCs auf dem neuesten Stand
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {agentsWithUpdates.slice(0, visibleAgents).map((a) => {
+                      const critical  = a.updates.filter((u) => u.severity === "Critical").length;
+                      const important = a.updates.filter((u) => u.severity === "Important").length;
+                      const badge = critical > 0 ? SEV_COLOR.Critical : important > 0 ? SEV_COLOR.Important : SEV_COLOR.Low;
+                      return (
+                        <div key={a.id} className="rounded-lg border border-border bg-card px-3 py-2.5 space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm font-medium text-foreground truncate">{a.asset?.name ?? a.hostname}</p>
+                            <span className={`text-[10px] font-medium rounded-full px-2 py-0.5 border shrink-0 ml-2 ${badge}`}>
+                              {a.updates.length} Updates
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap gap-1">
+                            {a.updates.slice(0, 3).map((u, i) => (
+                              <span key={i} className={`text-[10px] rounded px-1.5 py-0.5 border ${SEV_COLOR[u.severity] ?? SEV_COLOR.Low}`}>
+                                {u.kb || u.severity}
+                              </span>
+                            ))}
+                            {a.updates.length > 3 && (
+                              <span className="text-[10px] text-muted-foreground">+{a.updates.length - 3} weitere</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </div>
 
         {/* Recent jobs */}

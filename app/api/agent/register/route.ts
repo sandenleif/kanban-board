@@ -21,6 +21,8 @@ type HardwareInfo = {
   domain?:           string;
   agentVersion?:     string;
   installedSoftware?: Array<{ name: string; version?: string; publisher?: string }>;
+  pendingUpdates?:   Array<{ title: string; severity: string; kb: string }>;
+  updatesCheckedAt?: string;
 };
 
 export async function POST(req: NextRequest) {
@@ -95,6 +97,8 @@ export async function POST(req: NextRequest) {
     domain:       hardware.domain       ?? null,
     agentVersion:      hardware.agentVersion     ?? null,
     installedSoftware: hardware.installedSoftware ?? undefined,
+    pendingUpdates:    hardware.pendingUpdates    ?? undefined,
+    updatesCheckedAt:  hardware.updatesCheckedAt  ? new Date(hardware.updatesCheckedAt) : undefined,
     vlanId:            vlanId,
     lastSeenAt:        new Date(),
   };
