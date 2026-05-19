@@ -75,16 +75,13 @@ export async function POST(req: NextRequest) {
   const ldap = await import("ldapjs").catch(() => null);
   if (!ldap) return NextResponse.json({ error: "ldapjs nicht verfügbar" }, { status: 500 });
 
-  // Try multiple search bases where DHCP scopes can live
-  const searchBases = [
-    `CN=DhcpRoot,CN=System,${ldapConfig.baseDn}`,
-    `CN=System,${ldapConfig.baseDn}`,
-    ldapConfig.baseDn,
-  ];
+  // Build Configuration NC base from domain baseDn
+  // e.g. DC=intern,DC=siloah,DC=de → CN=Configuration,DC=intern,DC=siloah,DC=de
+  const configBase = `CN=Configuration,${ldapConfig.baseDn}`;
 
-  type Scope = { subnet: string; mask: string; name: string };
+  type RawEntry = { cidr: string; name: string };
 
-  const trySearch = (base: string): Promise<{ scopes: Scope[]; error?: string }> =>
+  const ldapSearch = (base: string, filter: string, attrs: string[]): Promise<{ entries: any[]; error?: string }> =>
     new Promise((resolve) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const client: any = ldap.createClient({
@@ -92,55 +89,74 @@ export async function POST(req: NextRequest) {
         timeout: 10000, connectTimeout: 8000, referrals: false,
       } as Parameters<typeof ldap.createClient>[0]);
 
-      client.on("error", (e: Error) => resolve({ scopes: [], error: e.message }));
-
+      client.on("error", (e: Error) => resolve({ entries: [], error: e.message }));
       client.bind(ldapConfig.bindDn, ldapConfig.bindPassword, (bindErr: Error | null) => {
-        if (bindErr) { client.destroy(); resolve({ scopes: [], error: `Bind: ${bindErr.message}` }); return; }
+        if (bindErr) { client.destroy(); resolve({ entries: [], error: `Bind: ${bindErr.message}` }); return; }
 
-        client.search(base, {
-          filter: "(objectClass=dhcpSubnet)",
-          scope: "sub",
-          attributes: ["cn", "dhcpMask", "name", "description"],
-          sizeLimit: 500,
-        }, (searchErr: Error | null, res: any) => {
-          if (searchErr) { client.destroy(); resolve({ scopes: [], error: searchErr.message }); return; }
-
-          const scopes: Scope[] = [];
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const get = (e: any, a: string) => (e.pojo?.attributes ?? []).find((x: any) => x.type === a)?.values?.[0] ?? "";
-
-          res.on("searchReference", () => {});
-          res.on("searchEntry", (entry: any) => {
-            const subnet = get(entry, "cn");
-            const mask   = get(entry, "dhcpMask");
-            const name   = get(entry, "name") || get(entry, "description") || subnet;
-            if (subnet && mask) scopes.push({ subnet, mask, name });
+        client.search(base, { filter, scope: "sub", attributes: attrs, sizeLimit: 500 },
+          (searchErr: Error | null, res: any) => {
+            if (searchErr) { client.destroy(); resolve({ entries: [], error: searchErr.message }); return; }
+            const entries: any[] = [];
+            res.on("searchReference", () => {});
+            res.on("searchEntry", (e: any) => entries.push(e));
+            res.on("error", (e: Error) => { client.destroy(); resolve({ entries, error: e.message }); });
+            res.on("end", () => { client.destroy(); resolve({ entries }); });
           });
-          res.on("error", (e: Error) => { client.destroy(); resolve({ scopes: [], error: e.message }); });
-          res.on("end", () => { client.destroy(); resolve({ scopes }); });
-        });
       });
     });
 
-  const triedBases: string[] = [];
-  for (const base of searchBases) {
-    triedBases.push(base);
-    const { scopes, error } = await trySearch(base);
-    if (scopes.length > 0) {
-      const vlans = scopes
-        .map((s) => ({ name: s.name.trim() || s.subnet, subnet: `${s.subnet}/${maskToCidr(s.mask)}` }))
-        .filter((v) => cidrValid(v.subnet));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const get = (entry: any, attr: string) =>
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (entry.pojo?.attributes ?? []).find((a: any) => a.type === attr)?.values?.[0] ?? "";
 
-      const { created, skipped } = await upsertVlans(user.organizationId!, vlans);
-      return NextResponse.json({ ok: true, created, skipped, total: scopes.length, source: base });
-    }
-    if (error && !error.includes("No Such Object") && !error.includes("noSuchObject")) {
-      return NextResponse.json({ error: `LDAP-Fehler bei "${base}": ${error}` }, { status: 500 });
-    }
+  // ── Strategy 1: AD Sites and Subnets (most reliable, always populated) ──────
+  // CN=Subnets,CN=Sites,CN=Configuration,DC=...
+  const sitesBase = `CN=Subnets,CN=Sites,${configBase}`;
+  const { entries: subnetEntries } = await ldapSearch(
+    sitesBase,
+    "(objectClass=subnet)",
+    ["cn", "description", "location", "siteObject"]
+  );
+
+  if (subnetEntries.length > 0) {
+    const vlans: RawEntry[] = subnetEntries
+      .map((e) => {
+        const cidr = get(e, "cn"); // already in CIDR format e.g. "172.29.13.0/24"
+        const name = get(e, "description") || get(e, "location") || cidr;
+        return { cidr, name };
+      })
+      .filter((v) => cidrValid(v.cidr));
+
+    const { created, skipped } = await upsertVlans(user.organizationId!, vlans.map((v) => ({ name: v.name.trim() || v.cidr, subnet: v.cidr })));
+    return NextResponse.json({ ok: true, created, skipped, total: vlans.length, source: "AD Sites & Subnets" });
+  }
+
+  // ── Strategy 2: DHCP scopes in AD (only if AD-integrated DHCP) ───────────────
+  const dhcpBase = `CN=DhcpRoot,CN=System,${ldapConfig.baseDn}`;
+  const { entries: dhcpEntries } = await ldapSearch(
+    dhcpBase,
+    "(objectClass=dhcpSubnet)",
+    ["cn", "dhcpMask", "name", "description"]
+  );
+
+  if (dhcpEntries.length > 0) {
+    const vlans = dhcpEntries
+      .map((e) => {
+        const subnet = get(e, "cn");
+        const mask   = get(e, "dhcpMask");
+        const name   = get(e, "name") || get(e, "description") || subnet;
+        const prefix = maskToCidr(mask);
+        return { name: name.trim(), subnet: `${subnet}/${prefix}` };
+      })
+      .filter((v) => cidrValid(v.subnet));
+
+    const { created, skipped } = await upsertVlans(user.organizationId!, vlans);
+    return NextResponse.json({ ok: true, created, skipped, total: vlans.length, source: "AD DHCP" });
   }
 
   return NextResponse.json({
-    error: `Keine DHCP-Scopes in AD gefunden.\n\nGesucht in:\n${triedBases.join("\n")}\n\nDein DHCP-Server ist möglicherweise nicht AD-integriert. Nutze stattdessen "Manuell eingeben" und trage die Subnetze direkt ein.`,
+    error: "Keine Subnetze in AD gefunden (weder Sites & Subnets noch DHCP). Nutze 'Aus Agent-IPs' oder manuell.",
     hint: "text",
   }, { status: 404 });
 }
