@@ -39,6 +39,8 @@ export function NetworkDashboard({ vlans: initial, agents }: { vlans: Vlan[]; ag
   const [adComputers, setAdComputers] = useState<AdComputer[]>([]);
   const [adLoading, setAdLoading] = useState(false);
   const [dhcpLoading, setDhcpLoading] = useState(false);
+  const [showTextImport, setShowTextImport] = useState(false);
+  const [textSubnets, setTextSubnets] = useState("");
   const [isPending, startTransition] = useTransition();
   const [newVlan, setNewVlan] = useState({ name: "", subnet: "", gateway: "", description: "" });
   const [showAddVlan, setShowAddVlan] = useState(false);
@@ -48,13 +50,39 @@ export function NetworkDashboard({ vlans: initial, agents }: { vlans: Vlan[]; ag
   const importDhcp = async () => {
     setDhcpLoading(true);
     try {
-      const res = await fetch("/api/admin/network/dhcp-import", { method: "POST" });
+      const res = await fetch("/api/admin/network/dhcp-import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "ad" }) });
       const data = await res.json();
-      if (!res.ok) { toast.error(data.error); return; }
+      if (!res.ok) {
+        if (data.hint === "text") {
+          toast.error("DHCP nicht in AD gefunden — bitte Subnetze manuell eingeben");
+          setShowTextImport(true);
+        } else {
+          toast.error(data.error.split("\n")[0]);
+        }
+        return;
+      }
       toast.success(`DHCP-Import: ${data.created} neue VLANs, ${data.skipped} übersprungen`);
-      // Reload page to show new VLANs
       window.location.reload();
     } catch { toast.error("DHCP-Import fehlgeschlagen"); }
+    finally { setDhcpLoading(false); }
+  };
+
+  const importText = async () => {
+    if (!textSubnets.trim()) return;
+    setDhcpLoading(true);
+    try {
+      const res = await fetch("/api/admin/network/dhcp-import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "text", subnets: textSubnets }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.error); return; }
+      toast.success(`${data.created} VLANs importiert, ${data.skipped} übersprungen`);
+      setShowTextImport(false);
+      setTextSubnets("");
+      window.location.reload();
+    } catch { toast.error("Import fehlgeschlagen"); }
     finally { setDhcpLoading(false); }
   };
 
@@ -165,6 +193,32 @@ export function NetworkDashboard({ vlans: initial, agents }: { vlans: Vlan[]; ag
               {v.vlan.name} ({v.vlan.subnet}) — nur noch <strong>{v.free}</strong> freie IPs
             </p>
           ))}
+        </div>
+      )}
+
+      {/* Text subnet import */}
+      {showTextImport && (
+        <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-foreground">Subnetze manuell eingeben</h3>
+            <button onClick={() => setShowTextImport(false)} className="text-muted-foreground hover:text-foreground text-xs">Schließen</button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Ein Subnet pro Zeile: <code className="bg-muted px-1 rounded">172.29.13.0/24 Management</code>
+          </p>
+          <textarea
+            value={textSubnets}
+            onChange={(e) => setTextSubnets(e.target.value)}
+            placeholder={"172.29.13.0/24 Management\n172.29.14.0/24 Server\n172.29.15.0/24 Clients"}
+            className="w-full h-32 rounded-md border border-border bg-background text-xs font-mono px-3 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+          <div className="flex gap-2">
+            <Button size="sm" onClick={importText} disabled={dhcpLoading || !textSubnets.trim()}>
+              {dhcpLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+              Importieren
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setShowTextImport(false)}>Abbrechen</Button>
+          </div>
         </div>
       )}
 
