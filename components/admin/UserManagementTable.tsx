@@ -16,7 +16,8 @@ import {
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { getInitials, formatDate } from "@/lib/utils";
-import { CheckCircle2, Ban, Trash2, MoreHorizontal, ShieldCheck, Clock, RotateCcw } from "lucide-react";
+import { CheckCircle2, Ban, Trash2, MoreHorizontal, ShieldCheck, Clock, RotateCcw, ChevronDown, ChevronUp } from "lucide-react";
+import { useState } from "react";
 
 type User = {
   id: string; name: string; email: string;
@@ -36,6 +37,7 @@ export function UserManagementTable({ users, currentUserId }: { users: User[]; c
   const s = useTranslations("status");
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
+  const [visible, setVisible] = useState(10);
 
   const act = (fn: () => Promise<{ error?: string; success?: boolean }>, msg: string) => {
     startTransition(async () => {
@@ -58,7 +60,7 @@ export function UserManagementTable({ users, currentUserId }: { users: User[]; c
           </tr>
         </thead>
         <tbody className="divide-y divide-border">
-          {users.map((user) => {
+          {users.slice(0, visible).map((user) => {
             const isMe = user.id === currentUserId;
             return (
               <tr key={user.id} className="hover:bg-muted/20 transition-colors">
@@ -160,6 +162,26 @@ export function UserManagementTable({ users, currentUserId }: { users: User[]; c
           })}
         </tbody>
       </table>
+      {users.length > 10 && (
+        <div className="flex items-center justify-between px-4 py-2.5 border-t border-border bg-muted/20 text-xs text-muted-foreground">
+          <span>{Math.min(visible, users.length)} von {users.length}</span>
+          <div className="flex gap-2">
+            {visible < users.length && (
+              <button onClick={() => setVisible((v) => Math.min(v + 10, users.length))}
+                className="flex items-center gap-1 hover:text-foreground transition-colors">
+                <ChevronDown className="h-3.5 w-3.5" />
+                {Math.min(10, users.length - visible)} weitere
+              </button>
+            )}
+            {visible > 10 && (
+              <button onClick={() => setVisible(10)}
+                className="flex items-center gap-1 hover:text-foreground transition-colors">
+                <ChevronUp className="h-3.5 w-3.5" /> Ausblenden
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

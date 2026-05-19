@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Plus, MonitorSmartphone, Package, CheckCircle2, XCircle, Clock, Loader2, Trash2, Key,
-         Wifi, WifiOff, RefreshCw, Copy, Terminal, Download, FolderPlus, Folder, X, Check } from "lucide-react";
+         Wifi, WifiOff, RefreshCw, Copy, Terminal, Download, FolderPlus, Folder, X, Check, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { deleteAgentAction, pushAgentUpdateAction, createGroupAction, deleteGroupAction, setAgentGroupsAction } from "@/actions/software";
@@ -29,6 +29,26 @@ const JOB_LABEL: Record<JobStatus, string> = {
   PENDING: "Ausstehend", RUNNING: "Läuft", SUCCESS: "Erfolgreich", FAILED: "Fehlgeschlagen", CANCELLED: "Abgebrochen",
 };
 
+function ShowMore({ total, visible, onMore, onLess }: { total: number; visible: number; onMore: () => void; onLess: () => void }) {
+  return (
+    <div className="flex items-center justify-between pt-1 text-xs text-muted-foreground">
+      <span>{Math.min(visible, total)} von {total}</span>
+      <div className="flex gap-2">
+        {visible < total && (
+          <button onClick={onMore} className="flex items-center gap-0.5 hover:text-foreground transition-colors">
+            <ChevronDown className="h-3 w-3" /> {Math.min(10, total - visible)} weitere
+          </button>
+        )}
+        {visible > 10 && (
+          <button onClick={onLess} className="flex items-center gap-0.5 hover:text-foreground transition-colors">
+            <ChevronUp className="h-3 w-3" /> Ausblenden
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function isOnline(lastSeenAt: Date | null) {
   if (!lastSeenAt) return false;
   return Date.now() - new Date(lastSeenAt).getTime() < 5 * 60 * 1000;
@@ -46,6 +66,9 @@ export function SoftwareDashboard({ packages, agents, groups, recentJobs, isAdmi
   const [token, setToken] = useState(initialToken);
   const [newGroupName, setNewGroupName] = useState("");
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
+  const [visiblePkgs, setVisiblePkgs] = useState(10);
+  const [visibleAgents, setVisibleAgents] = useState(10);
+  const [visibleJobs, setVisibleJobs] = useState(10);
 
   const handleRegenToken = () => {
     if (!confirm("Neuen Enrollment-Token generieren? Alle PCs müssen danach neu eingerichtet werden.")) return;
@@ -137,7 +160,7 @@ export function SoftwareDashboard({ packages, agents, groups, recentJobs, isAdmi
             <p className="text-xs text-muted-foreground">Noch keine Pakete — <Link href="/software/packages/new" className="text-primary hover:underline">Erstes anlegen</Link></p>
           ) : (
             <div className="space-y-2">
-              {packages.map((p) => (
+              {packages.slice(0, visiblePkgs).map((p) => (
                 <Link key={p.id} href={`/software/packages/${p.id}`}
                   className="block rounded-lg border border-border bg-card px-3 py-2.5 hover:border-primary/30 transition-colors">
                   <div className="flex items-center justify-between">
@@ -149,6 +172,9 @@ export function SoftwareDashboard({ packages, agents, groups, recentJobs, isAdmi
                   </div>
                 </Link>
               ))}
+              {packages.length > 10 && (
+                <ShowMore total={packages.length} visible={visiblePkgs} onMore={() => setVisiblePkgs((v) => Math.min(v + 10, packages.length))} onLess={() => setVisiblePkgs(10)} />
+              )}
             </div>
           )}
         </div>
@@ -205,7 +231,7 @@ export function SoftwareDashboard({ packages, agents, groups, recentJobs, isAdmi
               )}
             </div>
             <div className="space-y-2">
-              {agents.map((a) => {
+              {agents.slice(0, visibleAgents).map((a) => {
                 const online = isOnline(a.lastSeenAt);
                 const name   = displayName(a);
                 return (
@@ -262,6 +288,9 @@ export function SoftwareDashboard({ packages, agents, groups, recentJobs, isAdmi
                 );
               })}
               {agents.length === 0 && <p className="text-xs text-muted-foreground">Noch keine PCs registriert.</p>}
+              {agents.length > 10 && (
+                <ShowMore total={agents.length} visible={visibleAgents} onMore={() => setVisibleAgents((v) => Math.min(v + 10, agents.length))} onLess={() => setVisibleAgents(10)} />
+              )}
             </div>
           </div>
 
@@ -304,7 +333,7 @@ export function SoftwareDashboard({ packages, agents, groups, recentJobs, isAdmi
             <p className="text-xs text-muted-foreground">Noch keine Jobs</p>
           ) : (
             <div className="space-y-2">
-              {recentJobs.map((j) => (
+              {recentJobs.slice(0, visibleJobs).map((j) => (
                 <div key={j.id} className="rounded-lg border border-border bg-card px-3 py-2 text-xs">
                   <div className="flex items-center justify-between mb-0.5">
                     <span className="font-medium text-foreground truncate">{j.package.name}</span>
@@ -314,6 +343,9 @@ export function SoftwareDashboard({ packages, agents, groups, recentJobs, isAdmi
                 </div>
               ))}
             </div>
+          )}
+          {recentJobs.length > 10 && (
+            <ShowMore total={recentJobs.length} visible={visibleJobs} onMore={() => setVisibleJobs((v) => Math.min(v + 10, recentJobs.length))} onLess={() => setVisibleJobs(10)} />
           )}
         </div>
       </div>

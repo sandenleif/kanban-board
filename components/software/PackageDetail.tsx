@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Play, Trash2, CheckCircle2, XCircle, Clock, Loader2, Package, X, Pencil, Folder, Monitor, Search } from "lucide-react";
+import { ArrowLeft, Play, Trash2, CheckCircle2, XCircle, Clock, Loader2, Package, X, Pencil, Folder, Monitor, Search, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -41,6 +41,7 @@ export function PackageDetail({ pkg, agents, groups, jobs, isAdmin }: {
   const [agentSearch, setAgentSearch] = useState("");
   const [copyOnly, setCopyOnly] = useState(false);
   const [expandedJob, setExpandedJob] = useState<string | null>(null);
+  const [visibleJobs, setVisibleJobs] = useState(10);
   const [editing, setEditing] = useState(false);
   const [editData, setEditData] = useState({
     name:          pkg.name,
@@ -313,7 +314,7 @@ export function PackageDetail({ pkg, agents, groups, jobs, isAdmin }: {
                 </tr>
               </thead>
               <tbody>
-                {jobs.map((j) => (
+                {jobs.slice(0, visibleJobs).map((j) => (
                   <>
                     <tr key={j.id} className="border-t border-border hover:bg-muted/30 cursor-pointer"
                       onClick={() => setExpandedJob(expandedJob === j.id ? null : j.id)}>
@@ -345,6 +346,25 @@ export function PackageDetail({ pkg, agents, groups, jobs, isAdmin }: {
                 ))}
               </tbody>
             </table>
+            {jobs.length > 10 && (
+              <div className="flex items-center justify-between px-4 py-2.5 border-t border-border bg-muted/20 text-xs text-muted-foreground">
+                <span>{Math.min(visibleJobs, jobs.length)} von {jobs.length}</span>
+                <div className="flex gap-3">
+                  {visibleJobs < jobs.length && (
+                    <button onClick={() => setVisibleJobs((v) => Math.min(v + 10, jobs.length))}
+                      className="flex items-center gap-1 hover:text-foreground transition-colors">
+                      <ChevronDown className="h-3.5 w-3.5" /> {Math.min(10, jobs.length - visibleJobs)} weitere
+                    </button>
+                  )}
+                  {visibleJobs > 10 && (
+                    <button onClick={() => setVisibleJobs(10)}
+                      className="flex items-center gap-1 hover:text-foreground transition-colors">
+                      <ChevronUp className="h-3.5 w-3.5" /> Ausblenden
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

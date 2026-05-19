@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Plus, Search, X, Package, AlertTriangle, Wrench, Archive, HelpCircle } from "lucide-react";
+import { Plus, Search, X, Package, AlertTriangle, Wrench, Archive, HelpCircle, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { AssetStatus } from "@prisma/client";
@@ -37,6 +37,7 @@ export function AssetList({ assets, categories, locations, isAdmin, currentFilte
 }) {
   const router = useRouter();
   const [search, setSearch] = useState(currentFilters.q ?? "");
+  const [visible, setVisible] = useState(10);
   const [, startTransition] = useTransition();
 
   const apply = (key: string, value: string) =>
@@ -117,7 +118,7 @@ export function AssetList({ assets, categories, locations, isAdmin, currentFilte
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {assets.map((a) => {
+              {assets.slice(0, visible).map((a) => {
                 const Icon = STATUS_ICON[a.status];
                 const warrantyExpired = a.warrantyUntil && new Date(a.warrantyUntil) < now;
                 const warrantySoon = a.warrantyUntil && !warrantyExpired && new Date(a.warrantyUntil).getTime() - now.getTime() < soonMs;
@@ -159,6 +160,29 @@ export function AssetList({ assets, categories, locations, isAdmin, currentFilte
               })}
             </tbody>
           </table>
+          {assets.length > 10 && (
+            <div className="flex items-center justify-between px-4 py-2.5 border-t border-border bg-muted/20 text-xs text-muted-foreground">
+              <span>{Math.min(visible, assets.length)} von {assets.length}</span>
+              <div className="flex gap-3">
+                {visible < assets.length && (
+                  <button onClick={() => setVisible((v) => Math.min(v + 10, assets.length))}
+                    className="flex items-center gap-1 hover:text-foreground transition-colors">
+                    <ChevronDown className="h-3.5 w-3.5" /> {Math.min(10, assets.length - visible)} weitere
+                  </button>
+                )}
+                {visible < assets.length && (
+                  <button onClick={() => setVisible(assets.length)}
+                    className="hover:text-foreground transition-colors">Alle anzeigen</button>
+                )}
+                {visible > 10 && (
+                  <button onClick={() => setVisible(10)}
+                    className="flex items-center gap-1 hover:text-foreground transition-colors">
+                    <ChevronUp className="h-3.5 w-3.5" /> Ausblenden
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

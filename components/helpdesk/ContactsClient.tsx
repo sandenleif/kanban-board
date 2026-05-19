@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Trash2, Users, Building2, Mail, Phone, Database, Edit2, X, Check } from "lucide-react";
+import { Search, Trash2, Users, Building2, Mail, Phone, Database, Edit2, X, Check, ChevronDown, ChevronUp } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { deleteContactAction, updateContactAction } from "@/actions/contact";
@@ -28,6 +28,7 @@ export function ContactsClient({ contacts: initial, currentFilters, isAdmin }: P
   const [editId, setEditId] = useState<string | null>(null);
   const [editData, setEditData] = useState<Partial<Contact>>({});
   const [isPending, startTransition] = useTransition();
+  const [visible, setVisible] = useState(10);
 
   const applyFilter = (key: string, value: string) => {
     const p = new URLSearchParams();
@@ -137,7 +138,7 @@ export function ContactsClient({ contacts: initial, currentFilters, isAdmin }: P
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {contacts.map((c) => {
+              {contacts.slice(0, visible).map((c) => {
                 const isEditing = editId === c.id;
                 const src = SOURCE_LABELS[c.source] ?? { label: c.source, color: "bg-muted text-muted-foreground" };
                 return (
@@ -233,6 +234,29 @@ export function ContactsClient({ contacts: initial, currentFilters, isAdmin }: P
               })}
             </tbody>
           </table>
+          {contacts.length > 10 && (
+            <div className="flex items-center justify-between px-4 py-2.5 border-t border-border bg-muted/20 text-xs text-muted-foreground">
+              <span>{Math.min(visible, contacts.length)} von {contacts.length}</span>
+              <div className="flex gap-3">
+                {visible < contacts.length && (
+                  <button onClick={() => setVisible((v) => Math.min(v + 10, contacts.length))}
+                    className="flex items-center gap-1 hover:text-foreground transition-colors">
+                    <ChevronDown className="h-3.5 w-3.5" /> {Math.min(10, contacts.length - visible)} weitere
+                  </button>
+                )}
+                {visible < contacts.length && (
+                  <button onClick={() => setVisible(contacts.length)}
+                    className="hover:text-foreground transition-colors">Alle anzeigen</button>
+                )}
+                {visible > 10 && (
+                  <button onClick={() => setVisible(10)}
+                    className="flex items-center gap-1 hover:text-foreground transition-colors">
+                    <ChevronUp className="h-3.5 w-3.5" /> Ausblenden
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
