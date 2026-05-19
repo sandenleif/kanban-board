@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { host, port, bindDn, baseDn, userFilter } = body;
+  const { host, port, bindDn, baseDn, userFilter, searchUser } = body;
   let { bindPassword } = body;
 
   if (!host || !bindDn || !baseDn) {
@@ -65,10 +65,10 @@ export async function POST(req: NextRequest) {
       });
 
       // Run one LDAP search, return count + sample names regardless of how it ends.
-      const runSearch = (filter: string): Promise<SearchResult> =>
+      const runSearch = (filter: string, searchBase = baseDn): Promise<SearchResult> =>
         new Promise((res) => {
           client.search(
-            baseDn,
+            searchBase,
             { filter, scope: "sub", attributes: ["cn", "displayName", "mail", "sAMAccountName"], sizeLimit: 5 },
             (searchErr: Error | null, sr: any) => {
               if (searchErr) { res({ count: 0, samples: [], err: searchErr.message }); return; }
@@ -102,10 +102,34 @@ export async function POST(req: NextRequest) {
 
           clearTimeout(timeout);
 
+          // User-specific search if searchUser is provided
+          if (searchUser?.trim()) {
+            const q = searchUser.trim();
+            const escaped = q.replace(/\\/g, "\\5c").replace(/\*/g, "\\2a").replace(/\(/g, "\\28").replace(/\)/g, "\\29");
+            // Also try transliterated version
+            const trans = q.replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue").replace(/ß/g, "ss");
+            const userSearchFilter = trans !== q
+              ? `(|(sAMAccountName=${escaped})(sAMAccountName=${trans}))`
+              : `(sAMAccountName=${escaped})`;
+
+            // Search in loginBaseDn
+            const ldapConfig = await prisma.ldapConfig.findUnique({ where: { organizationId: user.organizationId! }, select: { loginBaseDn: true } });
+            const searchBases = [baseDn];
+            if (ldapConfig?.loginBaseDn && ldapConfig.loginBaseDn !== baseDn) searchBases.push(ldapConfig.loginBaseDn);
+
+            const msgs: string[] = [];
+            for (const base of searchBases) {
+              const r = await runSearch(userSearchFilter, base);
+              msgs.push(`Suche in "${base}": ${r.count} Treffer${r.samples.length ? ` — ${r.samples.join(", ")}` : ""}${r.err ? ` (Fehler: ${r.err})` : ""}`);
+            }
+            done({ ok: msgs.some((m) => m.includes("1 Treffer") || m.includes("Treffer") && !m.includes("0 Treffer")), message: msgs.join("\n") });
+            return;
+          }
+
           const primaryFilter  = userFilter?.trim() || "(objectClass=person)";
           const fallbackFilter = "(objectClass=user)";
 
-          const primary = await runSearch(primaryFilter);
+          const primary = await runSearch(primaryFilter, baseDn);
 
           if (primary.count > 0) {
             done({
@@ -117,7 +141,7 @@ export async function POST(req: NextRequest) {
           }
 
           // Primary returned nothing — try fallback filter
-          const fallback = await runSearch(fallbackFilter);
+          const fallback = await runSearch(fallbackFilter, baseDn);
 
           if (fallback.count > 0) {
             done({
