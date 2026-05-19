@@ -15,34 +15,53 @@ export async function GET(req: NextRequest) {
   });
   if (!user?.organizationId) return NextResponse.json([]);
 
-  // 1. Direct LDAP search (if configured) — no Elasticsearch needed
-  const ldapConfig = await prisma.ldapConfig.findUnique({
-    where: { organizationId: user.organizationId },
-    select: { host: true, port: true, bindDn: true, bindPassword: true, baseDn: true, userFilter: true, enabled: true },
-  });
+  // Run LDAP + DB contact search in parallel
+  const [ldapConfig] = await Promise.all([
+    prisma.ldapConfig.findUnique({
+      where: { organizationId: user.organizationId },
+      select: { host: true, port: true, bindDn: true, bindPassword: true, baseDn: true, userFilter: true, enabled: true },
+    }),
+  ]);
 
-  if (ldapConfig?.enabled) {
-    const ldapResults = await searchLdap(ldapConfig, q);
-    if (ldapResults.length > 0) return NextResponse.json(ldapResults);
+  const [ldapResults, contacts] = await Promise.all([
+    ldapConfig?.enabled ? searchLdap(ldapConfig, q) : Promise.resolve([]),
+    prisma.ticketContact.findMany({
+      where: {
+        organizationId: user.organizationId,
+        OR: [
+          { name:       { contains: q, mode: "insensitive" } },
+          { email:      { contains: q, mode: "insensitive" } },
+          { externalId: { contains: q, mode: "insensitive" } },
+          { department: { contains: q, mode: "insensitive" } },
+        ],
+      },
+      select: { id: true, name: true, email: true, source: true, externalId: true, department: true, company: true },
+      take: 10,
+    }),
+  ]);
+
+  const dbResults = contacts.map((c) => ({
+    id:         c.id,
+    name:       c.name,
+    email:      c.email ?? "",
+    source:     c.source,
+    kuerzel:    c.externalId ?? "",
+    department: c.department ?? "",
+    company:    c.company ?? "",
+  }));
+
+  // Merge: LDAP first, then DB contacts (deduplicate by name+email)
+  const seen = new Set<string>();
+  const merged = [];
+  for (const r of [...ldapResults, ...dbResults]) {
+    const key = `${r.name}|${r.email}`.toLowerCase();
+    if (!seen.has(key)) { seen.add(key); merged.push(r); }
+    if (merged.length >= 15) break;
   }
 
-  // 2. Search saved contacts
-  const contacts = await prisma.ticketContact.findMany({
-    where: {
-      organizationId: user.organizationId,
-      OR: [
-        { name:  { contains: q, mode: "insensitive" } },
-        { email: { contains: q, mode: "insensitive" } },
-      ],
-    },
-    select: { name: true, email: true, source: true },
-    take: 10,
-  });
-  if (contacts.length > 0) {
-    return NextResponse.json(contacts.map((c) => ({ name: c.name, email: c.email ?? "", source: c.source })));
-  }
+  if (merged.length > 0) return NextResponse.json(merged);
 
-  // 3. Fallback: org users
+  // Fallback: org users
   const users = await prisma.user.findMany({
     where: {
       organizationId: user.organizationId,

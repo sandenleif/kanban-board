@@ -8,14 +8,16 @@ import { createContactAction } from "@/actions/contact";
 import { toast } from "sonner";
 
 interface Contact {
+  id?: string;
   name: string;
   email: string;
-  phone: string;
-  mobile: string;
-  department: string;
-  company: string;
-  title: string;
-  source: "ad" | "manual";
+  phone?: string;
+  mobile?: string;
+  department?: string;
+  company?: string;
+  title?: string;
+  kuerzel?: string;
+  source: "ad" | "manual" | "orbis" | string;
 }
 
 async function searchContacts(q: string): Promise<Contact[]> {
@@ -33,12 +35,13 @@ export interface SelectedContactData {
   id?: string;
   name: string;
   email: string;
-  phone: string;
-  mobile: string;
-  department: string;
-  company: string;
-  title: string;
-  source: "ad" | "manual";
+  phone?: string;
+  mobile?: string;
+  department?: string;
+  company?: string;
+  title?: string;
+  kuerzel?: string;
+  source: "ad" | "manual" | "orbis" | string;
 }
 
 interface Props {
@@ -90,11 +93,18 @@ export function ContactSearch({ hasElastic = false, ticketId, onContactCreated, 
   };
 
   const selectContact = (c: Contact) => {
-    setName(c.name); setEmail(c.email); setQuery(c.name);
-    setFromAd(c.source === "ad"); setShowDrop(false);
+    setName(c.name); setEmail(c.email ?? ""); setQuery(c.name);
+    setFromAd(c.source === "ad" || c.source === "orbis"); setShowDrop(false);
+
+    // Orbis contacts already exist in DB — just set their ID directly
+    if (c.source === "orbis" && c.id) {
+      setContactId(c.id);
+      onContactSelected?.({ id: c.id, name: c.name, email: c.email ?? "", phone: c.phone ?? "", mobile: c.mobile ?? "", department: c.department ?? "", company: c.company ?? "", title: c.title ?? "", kuerzel: c.kuerzel ?? "", source: "orbis" });
+      return;
+    }
 
     // Notify parent immediately with all available data
-    onContactSelected?.({ name: c.name, email: c.email, phone: c.phone, mobile: c.mobile, department: c.department, company: c.company, title: c.title, source: c.source });
+    onContactSelected?.({ name: c.name, email: c.email ?? "", phone: c.phone ?? "", mobile: c.mobile ?? "", department: c.department ?? "", company: c.company ?? "", title: c.title ?? "", source: c.source });
 
     // Auto-save AD contact with all available fields to local DB
     if (c.source === "ad" && c.email) {
@@ -156,7 +166,7 @@ export function ContactSearch({ hasElastic = false, ticketId, onContactCreated, 
         <div className="relative">
           <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input value={query} onChange={(e) => handleQueryChange(e.target.value)}
-            placeholder="Name oder E-Mail des Anfragestellers…" className="pl-9 pr-9" autoComplete="off" />
+            placeholder="Name, E-Mail oder Kürzel (z.B. SAAN)…" className="pl-9 pr-9" autoComplete="off" />
           {(loading || saving)
             ? <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
             : <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground opacity-50" />}
@@ -176,13 +186,19 @@ export function ContactSearch({ hasElastic = false, ticketId, onContactCreated, 
                   className="w-full flex items-center gap-3 px-3 py-2 text-sm hover:bg-muted transition-colors text-left">
                   <User className="h-4 w-4 text-muted-foreground shrink-0" />
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-foreground">{c.name}</p>
+                    <p className="font-medium text-foreground">
+                      {c.name}
+                      {c.kuerzel && <span className="ml-1.5 text-xs text-muted-foreground font-mono">({c.kuerzel})</span>}
+                    </p>
                     <p className="text-xs text-muted-foreground truncate">
                       {[c.email, c.department, c.phone || c.mobile].filter(Boolean).join(" · ")}
                     </p>
                   </div>
                   {c.source === "ad" && (
                     <span className="ml-auto text-[10px] text-primary bg-primary/10 rounded px-1.5 py-0.5 shrink-0">AD</span>
+                  )}
+                  {c.source === "orbis" && (
+                    <span className="ml-auto text-[10px] text-orange-400 bg-orange-400/10 rounded px-1.5 py-0.5 shrink-0">Orbis</span>
                   )}
                 </button>
               ))
