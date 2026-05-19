@@ -74,8 +74,8 @@ export default async function DashboardPage() {
           {greeting},{" "}
           <span className="text-primary">
             {session.name.includes(",")
-              ? session.name.split(",")[1]?.trim().split(" ")[0]   // "Sanden, Leif" → "Leif"
-              : session.name.split(" ")[0]}                        // "Leif Sanden" → "Leif"
+              ? session.name.split(",")[1]?.trim().split(" ")[0]
+              : session.name.split(" ")[0]}
           </span>
         </h1>
         <p className="text-muted-foreground text-sm mt-1">{t("subtitle")}</p>
